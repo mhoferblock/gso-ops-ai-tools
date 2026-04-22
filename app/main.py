@@ -304,8 +304,8 @@ def seed_bot_welcome():
     count = existing[0] if existing else 0
     if count == 0:
         conn.execute(
-            "INSERT INTO chat_messages (user_id,username,display_name,message,is_bot) "
-            "VALUES (?,?,?,?,?)",
+            "INSERT INTO chat_messages (user_id,username,display_name,message,is_bot,created_at) "
+            "VALUES (?,?,?,?,?,datetime('now'))",
             (None, "AOL_AI", "AOL AI",
              "Welcome to GSO Ops AI Tools! I'm AOL AI — your resident AI assistant. "
              "Type @AOL_AI in any message to ask me anything about AI tools, prompting, "
@@ -505,7 +505,7 @@ async def login(req: LoginReq):
     u = row(conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone())
     if not u:
         conn.execute(
-            "INSERT INTO users (username,display_name,email) VALUES (?,?,?)",
+            "INSERT INTO users (username,display_name,email,created_at) VALUES (?,?,?,datetime('now'))",
             (username, req.display_name.strip(), req.email or ""))
         conn.commit()
         u = row(conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone())
@@ -612,15 +612,15 @@ async def sso_login(request: Request):
     if not u:
         try:
             conn.execute(
-                "INSERT INTO users (username, display_name, email) VALUES (?,?,?)",
+                "INSERT INTO users (username, display_name, email, created_at) VALUES (?,?,?,datetime('now'))",
                 (username, display_name, email or "")
             )
             conn.commit()
             u = row(conn.execute(f"SELECT * FROM users WHERE {lookup_field}=?", (lookup_value,)).fetchone())
-        except sqlite3.IntegrityError:
+        except Exception:
             username = f"{username}_{_secrets.token_hex(3)}"
             conn.execute(
-                "INSERT INTO users (username, display_name, email) VALUES (?,?,?)",
+                "INSERT INTO users (username, display_name, email, created_at) VALUES (?,?,?,datetime('now'))",
                 (username, display_name, email or "")
             )
             conn.commit()
@@ -736,12 +736,12 @@ async def get_tool(tool_id: int, current_user=Depends(get_current_user)):
 async def create_tool(tool: ToolCreate, current_user=Depends(require_user)):
     conn = get_db_and_backup()
     cur = conn.execute(
-        "INSERT INTO tools (owner_id,name,url,description,summary,tags) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO tools (owner_id,name,url,description,summary,tags,created_at,updated_at) VALUES (?,?,?,?,?,?,datetime('now'),datetime('now'))",
         (current_user["id"], tool.name, tool.url, tool.description,
          tool.summary, json.dumps(tool.tags)))
     tid = cur.lastrowid
     conn.execute(
-        "INSERT INTO activity_feed (event_type,user_id,tool_id,message) VALUES (?,?,?,?)",
+        "INSERT INTO activity_feed (event_type,user_id,tool_id,message,created_at) VALUES (?,?,?,?,datetime('now'))",
         ("tool_added", current_user["id"], tid,
          f"{current_user['display_name']} added a new tool: {tool.name}"))
     conn.commit()
@@ -786,11 +786,11 @@ async def toggle_vote(tool_id: int, current_user=Depends(require_user)):
         conn.execute("UPDATE tools SET vote_count=MAX(0,vote_count-1) WHERE id=?", (tool_id,))
         voted = False
     else:
-        conn.execute("INSERT INTO votes (user_id,tool_id) VALUES (?,?)",
+        conn.execute("INSERT INTO votes (user_id,tool_id,created_at) VALUES (?,?,datetime('now'))",
                      (current_user["id"], tool_id))
         conn.execute("UPDATE tools SET vote_count=vote_count+1 WHERE id=?", (tool_id,))
         conn.execute(
-            "INSERT INTO activity_feed (event_type,user_id,tool_id,message) VALUES (?,?,?,?)",
+            "INSERT INTO activity_feed (event_type,user_id,tool_id,message,created_at) VALUES (?,?,?,?,datetime('now'))",
             ("vote", current_user["id"], tool_id,
              f"{current_user['display_name']} voted for a tool"))
         voted = True
@@ -827,12 +827,12 @@ async def cast_weekly_vote(tool_id: int, current_user=Depends(require_user)):
     conn = get_db_and_backup()
     try:
         conn.execute(
-            "INSERT INTO weekly_votes (user_id,tool_id,week_start) VALUES (?,?,?)",
+            "INSERT INTO weekly_votes (user_id,tool_id,week_start,created_at) VALUES (?,?,?,datetime('now'))",
             (current_user["id"], tool_id, week_start))
         conn.commit()
         conn.close()
         return {"success": True}
-    except sqlite3.IntegrityError:
+    except Exception:
         conn.close()
         raise HTTPException(400, "Already voted this week")
 
@@ -916,7 +916,7 @@ async def get_chat(since: Optional[int] = None):
 async def post_chat(msg: ChatMsg, current_user=Depends(require_user)):
     conn = get_db_and_backup()
     conn.execute(
-        "INSERT INTO chat_messages (user_id,username,display_name,message) VALUES (?,?,?,?)",
+        "INSERT INTO chat_messages (user_id,username,display_name,message,created_at) VALUES (?,?,?,?,datetime('now'))",
         (current_user["id"], current_user["username"],
          current_user["display_name"], msg.message))
     conn.commit()
@@ -929,7 +929,7 @@ async def ask_ai(req: AskReq, current_user=Depends(get_current_user)):
     response = await get_ai_response(req.message, req.history or [])
     conn = get_db_and_backup()
     conn.execute(
-        "INSERT INTO chat_messages (user_id,username,display_name,message,is_bot) VALUES (?,?,?,?,?)",
+        "INSERT INTO chat_messages (user_id,username,display_name,message,is_bot,created_at) VALUES (?,?,?,?,?,datetime('now'))",
         (None, "AOL_AI", "AOL AI", response, 1))
     conn.commit()
     conn.close()
@@ -962,7 +962,7 @@ async def get_practices():
 async def post_practice(practice: BestPractice, current_user=Depends(require_user)):
     conn = get_db_and_backup()
     conn.execute(
-        "INSERT INTO best_practices (user_id,author_name,title,content) VALUES (?,?,?,?)",
+        "INSERT INTO best_practices (user_id,author_name,title,content,created_at) VALUES (?,?,?,?,datetime('now'))",
         (current_user["id"], current_user["display_name"],
          practice.title, practice.content))
     conn.commit()
@@ -994,8 +994,8 @@ async def create_board_note(note: BoardNoteCreate, current_user=Depends(require_
     conn = get_db_and_backup()
     cur = conn.execute("""
         INSERT INTO board_notes
-        (user_id, author_name, message, color, emoji, drawing_data, pen_color, x_pos, y_pos, rotation)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
+        (user_id, author_name, message, color, emoji, drawing_data, pen_color, x_pos, y_pos, rotation, created_at, expires_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now','+7 days'))
     """, (current_user["id"], current_user["display_name"],
           note.message, note.color, note.emoji, note.drawing_data,
           note.pen_color, note.x_pos, note.y_pos, note.rotation))
