@@ -134,6 +134,21 @@ def init_db():
             message TEXT NOT NULL,
             created_at TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS board_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            author_name TEXT NOT NULL,
+            message TEXT DEFAULT '',
+            color TEXT DEFAULT '#FFEF5E',
+            emoji TEXT DEFAULT '',
+            drawing_data TEXT DEFAULT '',
+            pen_color TEXT DEFAULT '#000000',
+            x_pos REAL DEFAULT 100.0,
+            y_pos REAL DEFAULT 100.0,
+            rotation REAL DEFAULT 0.0,
+            created_at TEXT DEFAULT (datetime('now')),
+            expires_at TEXT DEFAULT (datetime('now', '+7 days'))
+        );
     """)
     conn.commit()
     conn.close()
@@ -283,6 +298,35 @@ def seed_demo_data():
         conn.execute(
             "INSERT INTO best_practices (user_id,author_name,title,content) VALUES (?,?,?,?)", p)
     conn.commit()
+
+    # Seed board notes
+    import random
+    board_notes = [
+        (uid["sarah_j"],  "Sarah Johnson",
+         "New anomaly model is live! 🚀 95% precision on the holdout set.",
+         "#FFEF5E", "🚀", "", 80, 60, -2.5),
+        (uid["marcus_t"], "Marcus Thompson",
+         "Reminder: Claude SOC demo is Thursday 2pm PT. Come see it live!",
+         "#B8E0FF", "📅", "", 280, 140, 1.8),
+        (uid["priya_k"],  "Priya Kapoor",
+         "Meeting Hub just got Confluence integration! Link in Slack.",
+         "#A8F5A0", "✅", "", 520, 80, -1.2),
+        (uid["devon_r"],  "Devon Rivera",
+         "NL-SQL now supports DLT! Ask it anything about your streaming tables.",
+         "#FFBF69", "💡", "", 160, 300, 3.0),
+        (uid["alex_c"],   "Alex Chen",
+         "Great quarter everyone. Competitive dashboard showed 3 new signals this week.",
+         "#E8B4F8", "📊", "", 440, 260, -3.5),
+        (uid["morgan_l"], "Morgan Lee",
+         "T&S risk model update — false positive rate down 40%. Big win!",
+         "#FF8DA1", "🎉", "", 680, 120, 2.1),
+    ]
+    for n in board_notes:
+        conn.execute("""
+            INSERT INTO board_notes
+            (user_id,author_name,message,color,emoji,drawing_data,x_pos,y_pos,rotation)
+            VALUES (?,?,?,?,?,?,?,?,?)""", n)
+    conn.commit()
     conn.close()
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
@@ -422,6 +466,20 @@ class BestPractice(BaseModel):
 
 class SummarizeReq(BaseModel):
     url: str
+
+class BoardNoteCreate(BaseModel):
+    message: str = ""
+    color: str = "#FFEF5E"
+    emoji: str = ""
+    drawing_data: str = ""
+    pen_color: str = "#000000"
+    x_pos: float = 100.0
+    y_pos: float = 100.0
+    rotation: float = 0.0
+
+class BoardNotePosition(BaseModel):
+    x_pos: float
+    y_pos: float
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(title="GSO Ops AI Tools", version="1.0.0")
@@ -781,6 +839,60 @@ async def post_practice(practice: BestPractice, current_user=Depends(require_use
 async def summarize(req: SummarizeReq):
     result = await summarize_url(req.url)
     return result
+
+# ── Board ─────────────────────────────────────────────────────────────────────
+@app.get("/api/board")
+async def get_board_notes(current_user=Depends(get_current_user)):
+    conn = get_db()
+    notes = rows(conn.execute("""
+        SELECT * FROM board_notes
+        WHERE expires_at > datetime('now')
+        ORDER BY created_at ASC
+    """).fetchall())
+    conn.close()
+    for n in notes:
+        n["is_mine"] = bool(current_user and n["user_id"] == current_user["id"])
+    return notes
+
+@app.post("/api/board")
+async def create_board_note(note: BoardNoteCreate, current_user=Depends(require_user)):
+    conn = get_db()
+    cur = conn.execute("""
+        INSERT INTO board_notes
+        (user_id, author_name, message, color, emoji, drawing_data, pen_color, x_pos, y_pos, rotation)
+        VALUES (?,?,?,?,?,?,?,?,?,?)
+    """, (current_user["id"], current_user["display_name"],
+          note.message, note.color, note.emoji, note.drawing_data,
+          note.pen_color, note.x_pos, note.y_pos, note.rotation))
+    nid = cur.lastrowid
+    conn.commit()
+    n = row(conn.execute("SELECT * FROM board_notes WHERE id=?", (nid,)).fetchone())
+    conn.close()
+    n["is_mine"] = True
+    return n
+
+@app.put("/api/board/{note_id}/position")
+async def update_note_position(note_id: int, pos: BoardNotePosition,
+                               current_user=Depends(require_user)):
+    conn = get_db()
+    conn.execute("UPDATE board_notes SET x_pos=?, y_pos=? WHERE id=?",
+                 (pos.x_pos, pos.y_pos, note_id))
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
+@app.delete("/api/board/{note_id}")
+async def delete_board_note(note_id: int, current_user=Depends(require_user)):
+    conn = get_db()
+    n = conn.execute("SELECT user_id FROM board_notes WHERE id=?", (note_id,)).fetchone()
+    if not n:
+        raise HTTPException(404, "Note not found")
+    if n["user_id"] != current_user["id"]:
+        raise HTTPException(403, "Not your note")
+    conn.execute("DELETE FROM board_notes WHERE id=?", (note_id,))
+    conn.commit()
+    conn.close()
+    return {"success": True}
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
 @app.get("/api/stats")

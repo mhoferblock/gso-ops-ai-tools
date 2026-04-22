@@ -22,6 +22,7 @@
     <button class="nav-link"        data-section="leaderboard"   onclick="navigate('leaderboard')">Leaderboard</button>
     <button class="nav-link"        data-section="chat"          onclick="navigate('chat')">AOL AI Chat</button>
     <button class="nav-link"        data-section="best-practices" onclick="navigate('best-practices')">Best Practices</button>
+    <button class="nav-link"        data-section="board"          onclick="navigate('board')">📌 Cork Board</button>
   </div>
   <div class="nav-right" id="nav-right">
     <button class="btn-nav-login" onclick="openModal('login-modal')">Sign in</button>
@@ -287,6 +288,110 @@
   <section id="profile-view" class="section">
     <div id="profile-view-content">
       <div class="empty"><p>Loading…</p></div>
+    </div>
+  </section>
+
+  <!-- ── Cork Board ─────────────────────────────────────────────────────── -->
+  <section id="board" class="section">
+    <div class="board-page-layout">
+
+      <!-- Left: cork board canvas -->
+      <div class="board-area">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div>
+            <h1 style="font-size:22px;font-weight:800;margin:0 0 3px">GSO Community Board</h1>
+            <p style="font-size:13px;color:var(--text-muted);margin:0">Drag notes anywhere · Notes vanish after 7 days</p>
+          </div>
+          <button class="btn-secondary" style="font-size:12px;padding:6px 14px" onclick="loadBoard()">↻ Refresh</button>
+        </div>
+        <div class="corkboard" id="corkboard">
+          <div class="board-empty-hint" id="board-empty-hint">
+            Build your first note in the tray →<br>then pin it here!
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: note tray -->
+      <div class="board-tray">
+        <div style="font-size:17px;font-weight:800">Post-it Notes</div>
+        <p style="font-size:12px;color:var(--text-muted);margin:0">Color · write · draw · emoji · pin!</p>
+
+        <!-- Stack visual — click to reset -->
+        <div class="tray-stack-container" onclick="resetEditor()" title="Click to start fresh">
+          <div class="tray-stack-note" style="background:#A8F5A0;transform:rotate(-4deg);top:14px;left:14px"></div>
+          <div class="tray-stack-note" style="background:#FF8DA1;transform:rotate(2.5deg);top:8px;left:8px"></div>
+          <div class="tray-stack-note" style="background:#B8E0FF;transform:rotate(-1.5deg);top:4px;left:4px"></div>
+          <div class="tray-stack-note top-note" style="background:#FFEF5E;top:0;left:0">
+            <span style="font-size:11px;color:rgba(0,0,0,.4);pointer-events:none">tap stack to reset</span>
+          </div>
+        </div>
+
+        <!-- Color picker -->
+        <div class="tray-section">
+          <div class="tray-label">Note color</div>
+          <div class="note-color-picker">
+            <div class="note-color-swatch active" style="background:#FFEF5E" onclick="setNoteColor('#FFEF5E',this)" title="Yellow"></div>
+            <div class="note-color-swatch"        style="background:#A8F5A0" onclick="setNoteColor('#A8F5A0',this)" title="Green"></div>
+            <div class="note-color-swatch"        style="background:#FF8DA1" onclick="setNoteColor('#FF8DA1',this)" title="Pink"></div>
+            <div class="note-color-swatch"        style="background:#B8E0FF" onclick="setNoteColor('#B8E0FF',this)" title="Blue"></div>
+            <div class="note-color-swatch"        style="background:#FFBF69" onclick="setNoteColor('#FFBF69',this)" title="Orange"></div>
+            <div class="note-color-swatch"        style="background:#E8B4F8" onclick="setNoteColor('#E8B4F8',this)" title="Purple"></div>
+            <div class="note-color-swatch"        style="background:#FFFFFF;border:1px solid #ccc" onclick="setNoteColor('#FFFFFF',this)" title="White"></div>
+            <div class="note-color-swatch"        style="background:#F5E6C8" onclick="setNoteColor('#F5E6C8',this)" title="Cream"></div>
+          </div>
+        </div>
+
+        <!-- Note writing + drawing surface -->
+        <div class="tray-section">
+          <div class="tray-label">Write &amp; draw on your note</div>
+          <div class="editor-note-surface" id="editor-surface" style="background:#FFEF5E">
+            <canvas id="editor-canvas" width="220" height="195"></canvas>
+            <textarea id="note-text-input" class="editor-textarea"
+                      placeholder="Write your message…&#10;(200 chars max)" maxlength="200"></textarea>
+            <div id="editor-emoji-display" class="editor-emoji-overlay"></div>
+            <div class="draw-mode-indicator">✏️ Draw mode on</div>
+          </div>
+        </div>
+
+        <!-- Pen colors (shown when drawing) -->
+        <div class="tray-section" id="pen-color-section" style="display:none">
+          <div class="tray-label">Pen color</div>
+          <div class="pen-color-picker">
+            <div class="pen-color-swatch active" style="background:#000000" onclick="setPenColor('#000000',this)" title="Black"></div>
+            <div class="pen-color-swatch"        style="background:#CC0000" onclick="setPenColor('#CC0000',this)" title="Red"></div>
+            <div class="pen-color-swatch"        style="background:#0044CC" onclick="setPenColor('#0044CC',this)" title="Blue"></div>
+            <div class="pen-color-swatch"        style="background:#007700" onclick="setPenColor('#007700',this)" title="Green"></div>
+            <div class="pen-color-swatch"        style="background:#8800CC" onclick="setPenColor('#8800CC',this)" title="Purple"></div>
+            <div class="pen-color-swatch"        style="background:#FF6600" onclick="setPenColor('#FF6600',this)" title="Orange"></div>
+            <div class="pen-color-swatch"        style="background:#884400" onclick="setPenColor('#884400',this)" title="Brown"></div>
+          </div>
+        </div>
+
+        <!-- Emoji picker -->
+        <div class="tray-section">
+          <div class="tray-label">Add an emoji</div>
+          <div class="emoji-picker-grid" id="emoji-picker"></div>
+          <div class="selected-emoji-preview" id="selected-emoji"></div>
+        </div>
+
+        <!-- Draw tools -->
+        <div class="tray-section">
+          <div class="editor-tool-row">
+            <button id="draw-btn"   class="btn-tool" onclick="toggleDrawMode()">✏️ Draw</button>
+            <button id="eraser-btn" class="btn-tool" onclick="toggleEraser()">◻ Erase</button>
+            <button                 class="btn-tool" onclick="clearDrawing()">🗑 Clear</button>
+          </div>
+        </div>
+
+        <!-- Pin! -->
+        <button class="btn-pin-board" id="pin-btn" onclick="pinNoteToBoard()">
+          📌 Pin to Board!
+        </button>
+        <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:-8px">
+          Sign in required · Notes expire in 7 days
+        </div>
+      </div>
+
     </div>
   </section>
 

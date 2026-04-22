@@ -174,6 +174,7 @@ function navigate(section, param) {
   if (section === 'leaderboard')   loadLeaderboard();
   if (section === 'chat')          loadChat();
   if (section === 'best-practices') loadBestPractices();
+  if (section === 'board')         loadBoard();
   if (section === 'profile-me')    loadProfileMe();
   if (section === 'profile-view')  loadProfileView(param);
 }
@@ -890,9 +891,322 @@ async function init() {
   loadAuth();
   navigate('home');
   if (state.user) {
-    // Check winner after a short delay so home loads first
     setTimeout(checkWinner, 1500);
   }
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ── Board ─────────────────────────────────────────────────────────────────────
+const BOARD_EMOJIS = [
+  '😀','😎','🤔','😍','🥳','🙌','👏','🤝',
+  '🚀','💡','🔥','⭐','✅','❌','📌','📊',
+  '💻','🤖','🧠','⚡','💪','🎯','📅','🗓️',
+  '❤️','💯','👍','🎉','🏆','✨','💎','🌟',
+];
+
+const boardState = {
+  selectedColor: '#FFEF5E',
+  selectedEmoji: '',
+  isDrawMode: false,
+  isEraser: false,
+  penColor: '#000000',
+  isDrawing: false,
+  lastX: 0, lastY: 0,
+  dragNote: null,
+  dragOffsetX: 0, dragOffsetY: 0,
+  _canvasInited: false,
+  _dragInited: false,
+};
+
+async function loadBoard() {
+  const grid = $('emoji-picker');
+  if (grid && !grid.children.length) {
+    grid.innerHTML = BOARD_EMOJIS.map(e =>
+      `<button class="emoji-btn" onclick="selectEmoji('${e}',this)">${e}</button>`
+    ).join('');
+  }
+  try {
+    const notes = await api.get('/api/board');
+    const board  = $('corkboard');
+    const hint   = $('board-empty-hint');
+    board.querySelectorAll('.board-note').forEach(n => n.remove());
+    if (notes.length > 0) {
+      if (hint) hint.style.display = 'none';
+      notes.forEach(renderBoardNote);
+    } else {
+      if (hint) hint.style.display = 'block';
+    }
+  } catch (e) { console.error('Board load error:', e); }
+
+  if (!boardState._canvasInited) { initEditorCanvas(); boardState._canvasInited = true; }
+  if (!boardState._dragInited)   { initBoardDrag();    boardState._dragInited   = true; }
+}
+
+function renderBoardNote(note) {
+  const board = $('corkboard');
+  if (!board) return;
+  const el = document.createElement('div');
+  el.className = 'board-note';
+  el.dataset.id = note.id;
+  el.style.left       = `${Math.max(0, note.x_pos)}px`;
+  el.style.top        = `${Math.max(0, note.y_pos)}px`;
+  el.style.background = note.color || '#FFEF5E';
+  el.style.transform  = `rotate(${note.rotation || 0}deg)`;
+  el.style.zIndex     = 10;
+  const canDelete = note.is_mine && state.user;
+  const daysLeft = note.expires_at
+    ? Math.max(0, Math.ceil((new Date(note.expires_at.replace(' ','T')+'Z') - Date.now()) / 86400000))
+    : 7;
+  el.innerHTML = `
+    <div class="note-pin">
+      <div class="note-pin-head"></div>
+      <div class="note-pin-shaft"></div>
+    </div>
+    ${note.drawing_data ? `<img class="note-drawing-img" src="${note.drawing_data}" alt="">` : ''}
+    ${note.emoji        ? `<span class="note-emoji-big">${note.emoji}</span>` : ''}
+    ${note.message      ? `<div class="note-message-text">${esc(note.message)}</div>` : ''}
+    <div class="note-footer">
+      <span class="note-author-tag">${esc(note.author_name)}</span>
+      <span class="note-age-tag">${daysLeft}d left</span>
+      ${canDelete
+        ? `<button class="note-delete-btn" title="Remove"
+                   onclick="deleteBoardNote(event,${note.id},this.closest('.board-note'))">×</button>`
+        : ''}
+    </div>
+    <div class="note-expiry-bar" style="width:${Math.round((daysLeft/7)*100)}%"></div>
+  `;
+  el.addEventListener('mousedown', (e) => startNoteDrag(e, el));
+  board.appendChild(el);
+}
+
+function initBoardDrag() {
+  document.addEventListener('mousemove', (e) => {
+    if (!boardState.dragNote) return;
+    const board = $('corkboard');
+    if (!board) return;
+    const rect = board.getBoundingClientRect();
+    const x = e.clientX - rect.left - boardState.dragOffsetX;
+    const y = e.clientY - rect.top  - boardState.dragOffsetY;
+    const maxX = board.clientWidth  - boardState.dragNote.offsetWidth  - 2;
+    const maxY = board.clientHeight - boardState.dragNote.offsetHeight - 2;
+    const cx = Math.max(0, Math.min(maxX, x));
+    const cy = Math.max(0, Math.min(maxY, y));
+    boardState.dragNote.style.left = `${cx}px`;
+    boardState.dragNote.style.top  = `${cy}px`;
+    boardState.dragNote._pendingX  = cx;
+    boardState.dragNote._pendingY  = cy;
+  });
+  document.addEventListener('mouseup', async () => {
+    if (!boardState.dragNote) return;
+    const n = boardState.dragNote;
+    n.classList.remove('dragging');
+    n.style.transform = `rotate(${n._origRotation || 0}deg)`;
+    const nid = n.dataset.id;
+    const x = n._pendingX ?? parseFloat(n.style.left);
+    const y = n._pendingY ?? parseFloat(n.style.top);
+    boardState.dragNote = null;
+    if (nid && state.user) {
+      api.put(`/api/board/${nid}/position`, { x_pos: x, y_pos: y }).catch(() => {});
+    }
+  });
+}
+
+function startNoteDrag(e, el) {
+  if (e.button !== 0) return;
+  if (e.target.classList.contains('note-delete-btn')) return;
+  boardState.dragNote   = el;
+  const rect = el.getBoundingClientRect();
+  boardState.dragOffsetX = e.clientX - rect.left;
+  boardState.dragOffsetY = e.clientY - rect.top;
+  el._origRotation = parseFloat(el.style.transform?.match(/rotate\(([^)]+)deg\)/)?.[1] || 0);
+  el.classList.add('dragging');
+  e.preventDefault();
+}
+
+function initEditorCanvas() {
+  const canvas = $('editor-canvas');
+  if (!canvas) return;
+  canvas.addEventListener('mousedown', canvasMouseDown);
+  canvas.addEventListener('mousemove', canvasMouseMove);
+  canvas.addEventListener('mouseup',   () => { boardState.isDrawing = false; });
+  canvas.addEventListener('mouseleave',() => { boardState.isDrawing = false; });
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); canvasMouseDown(e.touches[0]); }, { passive: false });
+  canvas.addEventListener('touchmove',  e => { e.preventDefault(); canvasMouseMove(e.touches[0]); }, { passive: false });
+  canvas.addEventListener('touchend',   () => { boardState.isDrawing = false; });
+}
+
+function canvasMouseDown(e) {
+  boardState.isDrawing = true;
+  const canvas = $('editor-canvas');
+  const rect   = canvas.getBoundingClientRect();
+  boardState.lastX = (e.clientX - rect.left) * (canvas.width  / rect.width);
+  boardState.lastY = (e.clientY - rect.top)  * (canvas.height / rect.height);
+}
+
+function canvasMouseMove(e) {
+  if (!boardState.isDrawing) return;
+  const canvas = $('editor-canvas');
+  const ctx    = canvas.getContext('2d');
+  const rect   = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width  / rect.width);
+  const y = (e.clientY - rect.top)  * (canvas.height / rect.height);
+  ctx.beginPath();
+  ctx.moveTo(boardState.lastX, boardState.lastY);
+  ctx.lineTo(x, y);
+  if (boardState.isEraser) {
+    ctx.lineWidth = 20;
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+  } else {
+    ctx.lineWidth = 3;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = boardState.penColor;
+  }
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.stroke();
+  boardState.lastX = x; boardState.lastY = y;
+}
+
+function toggleDrawMode() {
+  boardState.isDrawMode = !boardState.isDrawMode;
+  boardState.isEraser   = false;
+  $('editor-canvas')?.classList.toggle('draw-active', boardState.isDrawMode);
+  $('editor-surface')?.classList.toggle('draw-mode',   boardState.isDrawMode);
+  $('draw-btn')?.classList.toggle('active',  boardState.isDrawMode);
+  $('eraser-btn')?.classList.remove('active');
+  if ($('pen-color-section')) $('pen-color-section').style.display = boardState.isDrawMode ? 'block' : 'none';
+}
+
+function toggleEraser() {
+  if (!boardState.isDrawMode) {
+    boardState.isDrawMode = true;
+    $('draw-btn')?.classList.add('active');
+    $('editor-canvas')?.classList.add('draw-active');
+    $('editor-surface')?.classList.add('draw-mode');
+    if ($('pen-color-section')) $('pen-color-section').style.display = 'block';
+  }
+  boardState.isEraser = !boardState.isEraser;
+  $('eraser-btn')?.classList.toggle('active', boardState.isEraser);
+  $('draw-btn')?.classList.toggle('active', !boardState.isEraser);
+}
+
+function clearDrawing() {
+  const c = $('editor-canvas');
+  if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+}
+
+function setNoteColor(color, el) {
+  boardState.selectedColor = color;
+  document.querySelectorAll('.note-color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  if ($('editor-surface')) $('editor-surface').style.background = color;
+  const topNote = document.querySelector('.tray-stack-note.top-note');
+  if (topNote) topNote.style.background = color;
+}
+
+function setPenColor(color, el) {
+  boardState.penColor = color;
+  boardState.isEraser = false;
+  document.querySelectorAll('.pen-color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  $('eraser-btn')?.classList.remove('active');
+}
+
+function selectEmoji(emoji, btn) {
+  boardState.selectedEmoji = (boardState.selectedEmoji === emoji) ? '' : emoji;
+  document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
+  if (boardState.selectedEmoji) btn.classList.add('selected');
+  if ($('selected-emoji'))      $('selected-emoji').textContent      = boardState.selectedEmoji;
+  if ($('editor-emoji-display'))$('editor-emoji-display').textContent = boardState.selectedEmoji;
+}
+
+function resetEditor() {
+  boardState.selectedColor = '#FFEF5E';
+  boardState.selectedEmoji = '';
+  boardState.isDrawMode    = false;
+  boardState.isEraser      = false;
+  if ($('editor-surface')) {
+    $('editor-surface').style.background = '#FFEF5E';
+    $('editor-surface').classList.remove('draw-mode');
+  }
+  if ($('note-text-input'))     $('note-text-input').value = '';
+  if ($('editor-canvas'))       $('editor-canvas').classList.remove('draw-active');
+  clearDrawing();
+  $('draw-btn')?.classList.remove('active');
+  $('eraser-btn')?.classList.remove('active');
+  document.querySelectorAll('.note-color-swatch').forEach((s,i) => s.classList.toggle('active', i===0));
+  document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
+  if ($('selected-emoji'))       $('selected-emoji').textContent       = '';
+  if ($('editor-emoji-display')) $('editor-emoji-display').textContent = '';
+  const topNote = document.querySelector('.tray-stack-note.top-note');
+  if (topNote) topNote.style.background = '#FFEF5E';
+  if ($('pen-color-section')) $('pen-color-section').style.display = 'none';
+  toast('Fresh note ready!');
+}
+
+async function pinNoteToBoard() {
+  if (!state.user) { openModal('login-modal'); return; }
+  const message = $('note-text-input')?.value.trim() || '';
+  const canvas  = $('editor-canvas');
+  let drawingData = '';
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    if (imageData.data.some((v, i) => i % 4 === 3 && v > 0)) {
+      drawingData = canvas.toDataURL('image/png');
+    }
+  }
+  if (!message && !drawingData && !boardState.selectedEmoji) {
+    toast('Add a message, draw something, or pick an emoji first!');
+    return;
+  }
+  const board  = $('corkboard');
+  const noteW = 175, noteH = 195;
+  const maxX  = Math.max(50, (board?.clientWidth  || 800) - noteW - 30);
+  const maxY  = Math.max(50, (board?.clientHeight || 560) - noteH - 30);
+  const x     = 20 + Math.random() * maxX;
+  const y     = 20 + Math.random() * maxY;
+  const rotation = (Math.random() * 10 - 5);
+  const btn = $('pin-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '📌 Pinning…'; }
+  try {
+    const note = await api.post('/api/board', {
+      message, color: boardState.selectedColor, emoji: boardState.selectedEmoji,
+      drawing_data: drawingData, pen_color: boardState.penColor,
+      x_pos: x, y_pos: y, rotation,
+    });
+    renderBoardNote(note);
+    if ($('board-empty-hint')) $('board-empty-hint').style.display = 'none';
+    toast('📌 Note pinned!');
+    resetEditor();
+    if (typeof confetti !== 'undefined') {
+      confetti({ particleCount: 30, spread: 55, origin: { y: 0.7 },
+                 colors: ['#FFEF5E','#FF8DA1','#A8F5A0','#B8E0FF','#E8B4F8'] });
+    }
+  } catch (e) {
+    toast('Could not pin: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📌 Pin to Board!'; }
+  }
+}
+
+async function deleteBoardNote(e, noteId, el) {
+  e.stopPropagation();
+  if (!state.user) return;
+  try {
+    await api.del(`/api/board/${noteId}`);
+    el.style.transition = 'opacity .3s, transform .3s';
+    el.style.opacity    = '0';
+    el.style.transform  = 'scale(0.8) rotate(15deg)';
+    setTimeout(() => {
+      el.remove();
+      const board = $('corkboard');
+      if (board && !board.querySelector('.board-note')) {
+        if ($('board-empty-hint')) $('board-empty-hint').style.display = 'block';
+      }
+    }, 300);
+    toast('Note removed.');
+  } catch (err) { toast(err.message); }
+}
+
