@@ -94,68 +94,75 @@ CREATE TABLE IF NOT EXISTS {cat}.{sch}.users (
     id        BIGINT  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     username  STRING  NOT NULL,
     display_name STRING NOT NULL,
-    email     STRING  DEFAULT '',
-    avatar_url STRING DEFAULT '',
-    bio       STRING  DEFAULT '',
-    favorite_ai_project STRING DEFAULT '',
-    created_at TIMESTAMP DEFAULT current_timestamp()
-) USING DELTA;
+    email     STRING,
+    avatar_url STRING,
+    bio       STRING,
+    favorite_ai_project STRING,
+    created_at TIMESTAMP
+) USING DELTA
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported');
 
 CREATE TABLE IF NOT EXISTS {cat}.{sch}.tools (
     id          BIGINT  GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     owner_id    BIGINT  NOT NULL,
     name        STRING  NOT NULL,
     url         STRING  NOT NULL,
-    description STRING  DEFAULT '',
-    summary     STRING  DEFAULT '',
-    thumbnail_url STRING DEFAULT '',
-    tags        STRING  DEFAULT '[]',
-    click_count BIGINT  DEFAULT 0,
-    vote_count  BIGINT  DEFAULT 0,
-    is_featured INT     DEFAULT 0,
-    created_at  TIMESTAMP DEFAULT current_timestamp(),
-    updated_at  TIMESTAMP DEFAULT current_timestamp()
-) USING DELTA;
+    description STRING,
+    summary     STRING,
+    thumbnail_url STRING,
+    tags        STRING,
+    click_count BIGINT,
+    vote_count  BIGINT,
+    is_featured INT,
+    created_at  TIMESTAMP,
+    updated_at  TIMESTAMP
+) USING DELTA
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported');
 
 CREATE TABLE IF NOT EXISTS {cat}.{sch}.votes (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id    BIGINT NOT NULL,
     tool_id    BIGINT NOT NULL,
-    created_at TIMESTAMP DEFAULT current_timestamp()
-) USING DELTA;
+    created_at TIMESTAMP
+) USING DELTA
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported');
 
 CREATE TABLE IF NOT EXISTS {cat}.{sch}.weekly_votes (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id    BIGINT NOT NULL,
     tool_id    BIGINT NOT NULL,
     week_start STRING NOT NULL,
-    created_at TIMESTAMP DEFAULT current_timestamp()
-) USING DELTA;
+    created_at TIMESTAMP
+) USING DELTA
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported');
 
 CREATE TABLE IF NOT EXISTS {cat}.{sch}.weekly_winners (
     id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     tool_id       BIGINT NOT NULL,
     week_start    STRING NOT NULL,
-    votes_at_time BIGINT DEFAULT 0,
-    created_at    TIMESTAMP DEFAULT current_timestamp()
-) USING DELTA;
+    votes_at_time BIGINT,
+    created_at    TIMESTAMP
+) USING DELTA
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported');
 
 CREATE TABLE IF NOT EXISTS {cat}.{sch}.winner_seen (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id    BIGINT NOT NULL,
     winner_id  BIGINT NOT NULL,
-    seen_at    TIMESTAMP DEFAULT current_timestamp()
-) USING DELTA;
+    seen_at    TIMESTAMP
+) USING DELTA
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported');
 
 CREATE TABLE IF NOT EXISTS {cat}.{sch}.chat_messages (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id      BIGINT,
     username     STRING NOT NULL,
-    display_name STRING DEFAULT '',
+    display_name STRING,
     message      STRING NOT NULL,
-    is_bot       INT    DEFAULT 0,
-    created_at   TIMESTAMP DEFAULT current_timestamp()
-) USING DELTA;
+    is_bot       INT,
+    created_at   TIMESTAMP
+) USING DELTA
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported');
 
 CREATE TABLE IF NOT EXISTS {cat}.{sch}.best_practices (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -163,8 +170,9 @@ CREATE TABLE IF NOT EXISTS {cat}.{sch}.best_practices (
     author_name STRING NOT NULL,
     title       STRING NOT NULL,
     content     STRING NOT NULL,
-    created_at  TIMESTAMP DEFAULT current_timestamp()
-) USING DELTA;
+    created_at  TIMESTAMP
+) USING DELTA
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported');
 
 CREATE TABLE IF NOT EXISTS {cat}.{sch}.activity_feed (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -172,24 +180,26 @@ CREATE TABLE IF NOT EXISTS {cat}.{sch}.activity_feed (
     user_id    BIGINT,
     tool_id    BIGINT,
     message    STRING NOT NULL,
-    created_at TIMESTAMP DEFAULT current_timestamp()
-) USING DELTA;
+    created_at TIMESTAMP
+) USING DELTA
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported');
 
 CREATE TABLE IF NOT EXISTS {cat}.{sch}.board_notes (
     id           BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id      BIGINT NOT NULL,
     author_name  STRING NOT NULL,
-    message      STRING DEFAULT '',
-    color        STRING DEFAULT '#FFEF5E',
-    emoji        STRING DEFAULT '',
-    drawing_data STRING DEFAULT '',
-    pen_color    STRING DEFAULT '#000000',
-    x_pos        DOUBLE DEFAULT 100.0,
-    y_pos        DOUBLE DEFAULT 100.0,
-    rotation     DOUBLE DEFAULT 0.0,
-    created_at   TIMESTAMP DEFAULT current_timestamp(),
-    expires_at   TIMESTAMP DEFAULT dateadd(DAY, 7, current_timestamp())
-) USING DELTA;
+    message      STRING,
+    color        STRING,
+    emoji        STRING,
+    drawing_data STRING,
+    pen_color    STRING,
+    x_pos        DOUBLE,
+    y_pos        DOUBLE,
+    rotation     DOUBLE,
+    created_at   TIMESTAMP,
+    expires_at   TIMESTAMP
+) USING DELTA
+TBLPROPERTIES ('delta.feature.allowColumnDefaults' = 'supported');
 """
 
 
