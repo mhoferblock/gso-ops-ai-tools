@@ -78,7 +78,7 @@ def rows(rs):
     return [row(r) for r in rs]
 
 def init_db():
-    conn = get_db()
+    conn = get_db_and_backup()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -180,9 +180,102 @@ def init_db():
 
 # seed_demo_data removed — app starts fresh for production use.
 
+# ── DBFS persistence layer ────────────────────────────────────────────────────
+# On Databricks Apps, /tmp is ephemeral.  We back the SQLite file up to DBFS
+# FileStore so data survives redeploys and container restarts.
+DBFS_BACKUP = "dbfs:/FileStore/gso-ops-ai-tools/gso_tools.db"
+_dbfs_lock = asyncio.Lock()
+
+def _dbfs_creds():
+    """Return (headers, host) for DBFS REST calls, or (None, None) if unavailable."""
+    token = os.getenv("DATABRICKS_TOKEN", "")
+    host  = os.getenv("DATABRICKS_HOST", "").rstrip("/")
+    if token and host:
+        return {"Authorization": f"Bearer {token}"}, host
+    return None, None
+
+def restore_db_from_dbfs():
+    """Download the SQLite DB from DBFS on cold-start."""
+    if not IS_DATABRICKS:
+        return
+    if DB_PATH.exists() and DB_PATH.stat().st_size > 4096:
+        return  # already have a live local copy
+    headers, host = _dbfs_creds()
+    if not headers:
+        return
+    try:
+        # Check if backup exists
+        st = http_requests.get(
+            f"{host}/api/2.0/dbfs/get-status",
+            headers=headers,
+            params={"path": DBFS_BACKUP},
+            timeout=8,
+        ).json()
+        size = st.get("file_size", 0)
+        if not size:
+            return  # no backup yet — first ever deploy
+
+        # Read the file in 512 KB chunks
+        offset, chunks = 0, []
+        chunk_size = 512 * 1024
+        while True:
+            resp = http_requests.get(
+                f"{host}/api/2.0/dbfs/read",
+                headers=headers,
+                params={"path": DBFS_BACKUP, "offset": offset, "length": chunk_size},
+                timeout=20,
+            ).json()
+            data = resp.get("data", "")
+            if not data:
+                break
+            chunks.append(base64.b64decode(data))
+            offset += len(chunks[-1])
+            if len(chunks[-1]) < chunk_size:
+                break  # last chunk
+
+        if chunks:
+            DB_PATH.write_bytes(b"".join(chunks))
+            print(f"[DB] Restored {DB_PATH.stat().st_size:,} bytes from DBFS")
+    except Exception as ex:
+        print(f"[DB] Could not restore from DBFS: {ex}")
+
+def backup_db_to_dbfs():
+    """Upload the current SQLite DB to DBFS (called after each write)."""
+    if not IS_DATABRICKS or not DB_PATH.exists():
+        return
+    headers, host = _dbfs_creds()
+    if not headers:
+        return
+    try:
+        db_bytes = DB_PATH.read_bytes()
+        resp = http_requests.post(
+            f"{host}/api/2.0/dbfs/put",
+            headers=headers,
+            json={"path": DBFS_BACKUP,
+                  "contents": base64.b64encode(db_bytes).decode(),
+                  "overwrite": True},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            print(f"[DB] DBFS backup failed: {resp.text[:120]}")
+    except Exception as ex:
+        print(f"[DB] Could not backup to DBFS: {ex}")
+
+def get_db_and_backup():
+    """Return a DB connection whose commit() also triggers a DBFS backup."""
+    conn = get_db()
+    original_commit = conn.commit
+    def commit_and_backup():
+        original_commit()
+        if IS_DATABRICKS:
+            import threading
+            threading.Thread(target=backup_db_to_dbfs, daemon=True).start()
+    conn.commit = commit_and_backup
+    return conn
+
 def seed_bot_welcome():
     """Insert AOL AI's welcome message once so the chat room has context."""
-    conn = get_db()
+    conn = get_db_and_backup()
     existing = conn.execute(
         "SELECT COUNT(*) FROM chat_messages WHERE is_bot=1"
     ).fetchone()[0]
@@ -219,7 +312,7 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
     uid = decode_token(authorization.split(" ", 1)[1])
     if not uid:
         return None
-    conn = get_db()
+    conn = get_db_and_backup()
     u = row(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
     conn.close()
     return u
@@ -368,6 +461,7 @@ app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="stati
 
 @app.on_event("startup")
 async def on_startup():
+    restore_db_from_dbfs()   # pull latest backup from DBFS before init
     init_db()
     seed_bot_welcome()
 
@@ -379,7 +473,7 @@ async def serve_spa():
 @app.post("/api/auth/login")
 async def login(req: LoginReq):
     username = re.sub(r"[^a-z0-9_]", "_", req.username.lower().strip())
-    conn = get_db()
+    conn = get_db_and_backup()
     u = row(conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone())
     if not u:
         conn.execute(
@@ -485,7 +579,7 @@ async def sso_login(request: Request):
     lookup_field = "email" if email else "username"
     lookup_value = email    if email else username
 
-    conn = get_db()
+    conn = get_db_and_backup()
     u = row(conn.execute(f"SELECT * FROM users WHERE {lookup_field}=?", (lookup_value,)).fetchone())
     if not u:
         try:
@@ -525,7 +619,7 @@ async def get_config():
 @app.get("/api/health")
 async def health_check():
     """Liveness probe for Databricks Apps and load balancers."""
-    conn = get_db()
+    conn = get_db_and_backup()
     user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     tool_count = conn.execute("SELECT COUNT(*) FROM tools").fetchone()[0]
     conn.close()
@@ -541,7 +635,7 @@ async def health_check():
 async def update_me(update: ProfileUpdate, current_user=Depends(require_user)):
     fields = {k: v for k, v in update.model_dump().items() if v is not None}
     if fields:
-        conn = get_db()
+        conn = get_db_and_backup()
         sets = ", ".join(f"{k}=?" for k in fields)
         conn.execute(f"UPDATE users SET {sets} WHERE id=?", (*fields.values(), current_user["id"]))
         conn.commit()
@@ -564,7 +658,7 @@ async def list_tools(
     search: Optional[str] = None,
     current_user=Depends(get_current_user),
 ):
-    conn = get_db()
+    conn = get_db_and_backup()
     q = tool_query_base() + " WHERE 1=1"
     params = []
     if owner:
@@ -587,7 +681,7 @@ async def list_tools(
 
 @app.get("/api/tools/featured")
 async def featured_tools():
-    conn = get_db()
+    conn = get_db_and_backup()
     ts = rows(conn.execute(
         tool_query_base() + " WHERE 1=1 ORDER BY t.vote_count DESC, t.click_count DESC LIMIT 6"
     ).fetchall())
@@ -596,7 +690,7 @@ async def featured_tools():
 
 @app.get("/api/tools/{tool_id}")
 async def get_tool(tool_id: int, current_user=Depends(get_current_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     t = row(conn.execute(
         tool_query_base() + " WHERE t.id=?", (tool_id,)
     ).fetchone())
@@ -612,7 +706,7 @@ async def get_tool(tool_id: int, current_user=Depends(get_current_user)):
 
 @app.post("/api/tools")
 async def create_tool(tool: ToolCreate, current_user=Depends(require_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     cur = conn.execute(
         "INSERT INTO tools (owner_id,name,url,description,summary,tags) VALUES (?,?,?,?,?,?)",
         (current_user["id"], tool.name, tool.url, tool.description,
@@ -629,7 +723,7 @@ async def create_tool(tool: ToolCreate, current_user=Depends(require_user)):
 
 @app.delete("/api/tools/{tool_id}")
 async def delete_tool(tool_id: int, current_user=Depends(require_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     t = conn.execute(
         "SELECT * FROM tools WHERE id=? AND owner_id=?",
         (tool_id, current_user["id"])).fetchone()
@@ -645,7 +739,7 @@ async def delete_tool(tool_id: int, current_user=Depends(require_user)):
 
 @app.post("/api/tools/{tool_id}/click")
 async def track_click(tool_id: int):
-    conn = get_db()
+    conn = get_db_and_backup()
     conn.execute("UPDATE tools SET click_count=click_count+1 WHERE id=?", (tool_id,))
     conn.commit()
     cnt = conn.execute("SELECT click_count FROM tools WHERE id=?", (tool_id,)).fetchone()
@@ -654,7 +748,7 @@ async def track_click(tool_id: int):
 
 @app.post("/api/tools/{tool_id}/vote")
 async def toggle_vote(tool_id: int, current_user=Depends(require_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     existing = conn.execute(
         "SELECT 1 FROM votes WHERE user_id=? AND tool_id=?",
         (current_user["id"], tool_id)).fetchone()
@@ -680,7 +774,7 @@ async def toggle_vote(tool_id: int, current_user=Depends(require_user)):
 # ── Leaderboard ───────────────────────────────────────────────────────────────
 @app.get("/api/leaderboard")
 async def leaderboard():
-    conn = get_db()
+    conn = get_db_and_backup()
     base = """
         SELECT t.id, t.name, t.url, t.click_count, t.vote_count,
                u.display_name as owner_name, u.username
@@ -702,7 +796,7 @@ async def leaderboard():
 @app.post("/api/weekly-vote/{tool_id}")
 async def cast_weekly_vote(tool_id: int, current_user=Depends(require_user)):
     week_start = (date.today() - timedelta(days=date.today().weekday())).isoformat()
-    conn = get_db()
+    conn = get_db_and_backup()
     try:
         conn.execute(
             "INSERT INTO weekly_votes (user_id,tool_id,week_start) VALUES (?,?,?)",
@@ -717,7 +811,7 @@ async def cast_weekly_vote(tool_id: int, current_user=Depends(require_user)):
 # ── Winner ────────────────────────────────────────────────────────────────────
 @app.get("/api/winner")
 async def get_winner(current_user=Depends(get_current_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     w = row(conn.execute("""
         SELECT ww.*, t.name as tool_name, t.url as tool_url, t.summary as tool_summary,
                u.display_name as owner_name, u.username as owner_username
@@ -738,7 +832,7 @@ async def get_winner(current_user=Depends(get_current_user)):
 
 @app.post("/api/winner/{winner_id}/seen")
 async def mark_winner_seen(winner_id: int, current_user=Depends(require_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     conn.execute("INSERT OR IGNORE INTO winner_seen (user_id,winner_id) VALUES (?,?)",
                  (current_user["id"], winner_id))
     conn.commit()
@@ -748,7 +842,7 @@ async def mark_winner_seen(winner_id: int, current_user=Depends(require_user)):
 # ── Users ─────────────────────────────────────────────────────────────────────
 @app.get("/api/users")
 async def list_users():
-    conn = get_db()
+    conn = get_db_and_backup()
     users = rows(conn.execute(
         "SELECT id,username,display_name,bio,favorite_ai_project,avatar_url,created_at FROM users ORDER BY display_name"
     ).fetchall())
@@ -757,7 +851,7 @@ async def list_users():
 
 @app.get("/api/users/{username}")
 async def get_user(username: str, current_user=Depends(get_current_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     u = row(conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone())
     if not u:
         raise HTTPException(404, "User not found")
@@ -777,7 +871,7 @@ async def get_user(username: str, current_user=Depends(get_current_user)):
 # ── Chat ──────────────────────────────────────────────────────────────────────
 @app.get("/api/chat")
 async def get_chat(since: Optional[int] = None):
-    conn = get_db()
+    conn = get_db_and_backup()
     if since:
         ms = rows(conn.execute(
             "SELECT * FROM chat_messages WHERE id>? ORDER BY id ASC LIMIT 50",
@@ -792,7 +886,7 @@ async def get_chat(since: Optional[int] = None):
 
 @app.post("/api/chat")
 async def post_chat(msg: ChatMsg, current_user=Depends(require_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     conn.execute(
         "INSERT INTO chat_messages (user_id,username,display_name,message) VALUES (?,?,?,?)",
         (current_user["id"], current_user["username"],
@@ -805,7 +899,7 @@ async def post_chat(msg: ChatMsg, current_user=Depends(require_user)):
 @app.post("/api/ask")
 async def ask_ai(req: AskReq, current_user=Depends(get_current_user)):
     response = await get_ai_response(req.message, req.history or [])
-    conn = get_db()
+    conn = get_db_and_backup()
     conn.execute(
         "INSERT INTO chat_messages (user_id,username,display_name,message,is_bot) VALUES (?,?,?,?,?)",
         (None, "AOL_AI", "AOL AI", response, 1))
@@ -816,7 +910,7 @@ async def ask_ai(req: AskReq, current_user=Depends(get_current_user)):
 # ── Feed ──────────────────────────────────────────────────────────────────────
 @app.get("/api/feed")
 async def get_feed(limit: int = 20):
-    conn = get_db()
+    conn = get_db_and_backup()
     items = rows(conn.execute("""
         SELECT af.*, u.display_name as user_name, t.name as tool_name
         FROM activity_feed af
@@ -830,7 +924,7 @@ async def get_feed(limit: int = 20):
 # ── Best Practices ────────────────────────────────────────────────────────────
 @app.get("/api/best-practices")
 async def get_practices():
-    conn = get_db()
+    conn = get_db_and_backup()
     ps = rows(conn.execute(
         "SELECT * FROM best_practices ORDER BY created_at DESC").fetchall())
     conn.close()
@@ -838,7 +932,7 @@ async def get_practices():
 
 @app.post("/api/best-practices")
 async def post_practice(practice: BestPractice, current_user=Depends(require_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     conn.execute(
         "INSERT INTO best_practices (user_id,author_name,title,content) VALUES (?,?,?,?)",
         (current_user["id"], current_user["display_name"],
@@ -856,7 +950,7 @@ async def summarize(req: SummarizeReq):
 # ── Board ─────────────────────────────────────────────────────────────────────
 @app.get("/api/board")
 async def get_board_notes(current_user=Depends(get_current_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     notes = rows(conn.execute("""
         SELECT * FROM board_notes
         WHERE expires_at > datetime('now')
@@ -869,7 +963,7 @@ async def get_board_notes(current_user=Depends(get_current_user)):
 
 @app.post("/api/board")
 async def create_board_note(note: BoardNoteCreate, current_user=Depends(require_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     cur = conn.execute("""
         INSERT INTO board_notes
         (user_id, author_name, message, color, emoji, drawing_data, pen_color, x_pos, y_pos, rotation)
@@ -887,7 +981,7 @@ async def create_board_note(note: BoardNoteCreate, current_user=Depends(require_
 @app.put("/api/board/{note_id}/position")
 async def update_note_position(note_id: int, pos: BoardNotePosition,
                                current_user=Depends(require_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     conn.execute("UPDATE board_notes SET x_pos=?, y_pos=? WHERE id=?",
                  (pos.x_pos, pos.y_pos, note_id))
     conn.commit()
@@ -896,7 +990,7 @@ async def update_note_position(note_id: int, pos: BoardNotePosition,
 
 @app.delete("/api/board/{note_id}")
 async def delete_board_note(note_id: int, current_user=Depends(require_user)):
-    conn = get_db()
+    conn = get_db_and_backup()
     n = conn.execute("SELECT user_id FROM board_notes WHERE id=?", (note_id,)).fetchone()
     if not n:
         raise HTTPException(404, "Note not found")
@@ -910,7 +1004,7 @@ async def delete_board_note(note_id: int, current_user=Depends(require_user)):
 # ── Stats ─────────────────────────────────────────────────────────────────────
 @app.get("/api/stats")
 async def get_stats():
-    conn = get_db()
+    conn = get_db_and_backup()
     total_tools  = conn.execute("SELECT COUNT(*) FROM tools").fetchone()[0]
     total_users  = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     total_votes  = conn.execute("SELECT COALESCE(SUM(vote_count),0) FROM tools").fetchone()[0]
