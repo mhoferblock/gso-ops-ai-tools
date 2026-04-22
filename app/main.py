@@ -1,15 +1,15 @@
 """
 GSO Ops AI Tools — FastAPI backend
-All-in-one: database, seed data, AI service, and API routes.
+All-in-one: database, auth (SSO + local), AI service, and API routes.
 """
-import os, json, re, base64, sqlite3, asyncio
+import os, json, re, base64, sqlite3, asyncio, secrets as _secrets
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Optional, List
 
-from fastapi import FastAPI, HTTPException, Header, Depends, Query
+from fastapi import FastAPI, HTTPException, Header, Depends, Query, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests as http_requests
@@ -20,14 +20,39 @@ try:
 except Exception:
     _ai_client = None
 
-# ── Paths ────────────────────────────────────────────────────────────────────
-BASE_DIR  = Path(__file__).parent.parent
-DATA_DIR  = BASE_DIR / "data"
-WEB_DIR   = BASE_DIR / "web"
-DB_PATH   = DATA_DIR / "gso_tools.db"
-SECRET    = os.getenv("SECRET_KEY", "gso-ops-ai-tools-secret-2024")
+# ── Config ───────────────────────────────────────────────────────────────────
+BASE_DIR = Path(__file__).parent.parent
+WEB_DIR  = BASE_DIR / "web"
 
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+# DB_PATH: override via env var to point at a Databricks Unity Catalog Volume
+# e.g.  DB_PATH=/Volumes/main/gso_ops/app_data/gso_tools.db
+_db_path_env = os.getenv("DB_PATH", "")
+if _db_path_env:
+    DB_PATH = Path(_db_path_env)
+else:
+    DB_PATH = BASE_DIR / "data" / "gso_tools.db"
+
+# Ensure parent directory exists (local dev creates data/; on Databricks the
+# Volume directory already exists so mkdir is a no-op / gracefully ignored)
+try:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
+
+# SECRET_KEY: must be set to a real random value in production.
+# Generate one with:  python3 -c "import secrets; print(secrets.token_hex(32))"
+SECRET = os.getenv("SECRET_KEY", "")
+if not SECRET:
+    SECRET = _secrets.token_hex(32)   # ephemeral fallback for local dev
+
+# Databricks Apps inject the authenticated user's email via this header.
+# When this env var is set (or DATABRICKS_RUNTIME_VERSION is present) we know
+# we are running inside a Databricks App and SSO is available.
+IS_DATABRICKS = bool(
+    os.getenv("DATABRICKS_APP_NAME") or
+    os.getenv("DATABRICKS_RUNTIME_VERSION") or
+    os.getenv("DATABRICKS_HOST")
+)
 
 # ── Database ─────────────────────────────────────────────────────────────────
 def get_db():
@@ -328,6 +353,9 @@ class BoardNotePosition(BaseModel):
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(title="GSO Ops AI Tools", version="1.0.0")
 
+# On Databricks Apps, requests are same-origin so CORS is irrelevant, but we
+# allow * for local dev convenience.  Tighten to your workspace URL in prod if
+# you want an extra layer: allow_origins=["https://<workspace>.azuredatabricks.net"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -367,6 +395,81 @@ async def get_me(current_user=Depends(get_current_user)):
     if not current_user:
         raise HTTPException(401, "Not authenticated")
     return current_user
+
+# ── Databricks SSO ────────────────────────────────────────────────────────────
+@app.post("/api/auth/sso")
+async def sso_login(request: Request):
+    """
+    Called by the frontend on every page load.
+    Databricks Apps inject the authenticated user's email via X-Forwarded-User.
+    We auto-provision the user account on first login, then return a token.
+    Returns 403 when running outside Databricks (local dev) so the frontend
+    falls back to the manual login form gracefully.
+    """
+    email = (
+        request.headers.get("X-Forwarded-User") or
+        request.headers.get("x-forwarded-user") or
+        ""
+    ).strip()
+
+    if not email:
+        raise HTTPException(
+            status_code=403,
+            detail="No SSO identity header — running in local/dev mode"
+        )
+
+    # Derive a stable username from the Block email (e.g. jane.doe@block.xyz → jane_doe)
+    local_part  = email.split("@")[0]
+    username    = re.sub(r"[^a-z0-9_]", "_", local_part.lower())
+    # Try to build a human-readable display name from the local part
+    display_name = " ".join(p.capitalize() for p in re.split(r"[._-]+", local_part))
+
+    conn = get_db()
+    u = row(conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone())
+    if not u:
+        # First-time SSO login — create the account
+        try:
+            conn.execute(
+                "INSERT INTO users (username, display_name, email) VALUES (?,?,?)",
+                (username, display_name, email)
+            )
+            conn.commit()
+            u = row(conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone())
+        except sqlite3.IntegrityError:
+            # Username collision (two people with same first.last prefix) — append suffix
+            username = f"{username}_{u['id'] if u else _secrets.token_hex(3)}"
+            conn.execute(
+                "INSERT INTO users (username, display_name, email) VALUES (?,?,?)",
+                (username, display_name, email)
+            )
+            conn.commit()
+            u = row(conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone())
+    conn.close()
+
+    return {"token": encode_token(u["id"]), "user": u, "sso": True}
+
+@app.get("/api/config")
+async def get_config():
+    """Tells the frontend what mode the server is running in."""
+    return {
+        "sso_mode": IS_DATABRICKS,
+        "ai_enabled": bool(_ai_client and os.getenv("ANTHROPIC_API_KEY")),
+    }
+
+@app.get("/api/health")
+async def health_check():
+    """Liveness probe for Databricks Apps and load balancers."""
+    conn = get_db()
+    user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    tool_count = conn.execute("SELECT COUNT(*) FROM tools").fetchone()[0]
+    conn.close()
+    return {
+        "status": "ok",
+        "db_path": str(DB_PATH),
+        "users": user_count,
+        "tools": tool_count,
+        "sso_mode": IS_DATABRICKS,
+    }
 
 @app.put("/api/auth/me")
 async def update_me(update: ProfileUpdate, current_user=Depends(require_user)):

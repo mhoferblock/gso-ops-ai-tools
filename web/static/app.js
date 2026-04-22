@@ -6,6 +6,8 @@ const BASE = '';
 const state = {
   user: null,
   token: null,
+  ssoMode: false,
+  serverConfig: { sso_mode: false, ai_enabled: false },
   currentSection: 'home',
   tools: [],
   chatMessages: [],
@@ -99,6 +101,30 @@ function loadAuth() {
   }
 }
 
+/**
+ * Try Databricks SSO auto-login.
+ * On Databricks Apps, X-Forwarded-User is injected server-side — the backend
+ * reads it and returns a token transparently.  Returns true if SSO succeeded.
+ * Returns false silently on local dev (403 from backend).
+ */
+async function attemptSSOLogin() {
+  try {
+    const data = await api.post('/api/auth/sso', {});
+    if (data.token && data.user) {
+      state.token   = data.token;
+      state.user    = data.user;
+      state.ssoMode = true;
+      localStorage.setItem('gso_token', data.token);
+      localStorage.setItem('gso_user',  JSON.stringify(data.user));
+      renderNav();
+      return true;
+    }
+  } catch (_) {
+    // Not on Databricks — fall through to manual login
+  }
+  return false;
+}
+
 async function login(username, displayName, email) {
   const data = await api.post('/api/auth/login', { username, display_name: displayName, email });
   state.token = data.token;
@@ -112,13 +138,19 @@ async function login(username, displayName, email) {
 }
 
 function logout() {
-  state.token = null;
-  state.user  = null;
+  state.token   = null;
+  state.user    = null;
+  state.ssoMode = false;
   localStorage.removeItem('gso_token');
   localStorage.removeItem('gso_user');
   renderNav();
   navigate('home');
-  toast('Signed out. See you soon!');
+  // On Databricks, SSO will silently re-authenticate on next page load
+  if (state.ssoMode) {
+    toast('Signed out. Refresh to sign back in via Databricks SSO.');
+  } else {
+    toast('Signed out. See you soon!');
+  }
 }
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
@@ -126,7 +158,14 @@ function renderNav() {
   const navRight = $('nav-right');
   if (!navRight) return;
   if (state.user) {
+    const ssoChip = state.ssoMode
+      ? `<span style="font-size:11px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
+                      color:rgba(255,255,255,.75);padding:2px 8px;border-radius:10px;letter-spacing:.3px">
+           🔐 SSO
+         </span>`
+      : '';
     navRight.innerHTML = `
+      ${ssoChip}
       <div class="avatar" style="background:${avatarColor(state.user.display_name)}"
            onclick="navigate('profile-me')" title="${esc(state.user.display_name)}">
         ${esc(initials(state.user.display_name))}
@@ -889,6 +928,20 @@ function switchTab(groupId, tab) {
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   loadAuth();
+
+  // Fetch server config (SSO mode flag, AI enabled flag)
+  try {
+    const cfg = await api.get('/api/config');
+    state.serverConfig = cfg;
+  } catch (_) {
+    state.serverConfig = { sso_mode: false, ai_enabled: false };
+  }
+
+  // On Databricks: silently authenticate via SSO if not already logged in
+  if (!state.user && state.serverConfig.sso_mode) {
+    await attemptSSOLogin();
+  }
+
   navigate('home');
   if (state.user) {
     setTimeout(checkWinner, 1500);

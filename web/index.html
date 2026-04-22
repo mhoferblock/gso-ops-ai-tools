@@ -404,42 +404,25 @@
   <div class="modal">
     <button class="modal-close" onclick="closeModal('login-modal')">×</button>
     <div class="modal-title">Sign in to GSO Ops AI Tools</div>
-    <div class="modal-subtitle">
-      Enter your Block username and display name. In production this uses Databricks SSO.
+    <div class="modal-subtitle" id="login-modal-subtitle">
+      Enter your Block username and display name to get started.
     </div>
     <form onsubmit="handleLogin(event)">
       <div class="form-group">
         <label class="form-label">Username (no spaces)</label>
-        <input id="login-username" class="form-input" placeholder="e.g. sarah_j" required
+        <input id="login-username" class="form-input" placeholder="e.g. your_name" required
                pattern="[a-zA-Z0-9_]+" title="Letters, numbers, and underscores only">
       </div>
       <div class="form-group">
         <label class="form-label">Display name</label>
-        <input id="login-display" class="form-input" placeholder="e.g. Sarah Johnson" required>
+        <input id="login-display" class="form-input" placeholder="e.g. Your Name" required>
       </div>
       <div class="form-group">
-        <label class="form-label">Email (optional)</label>
-        <input id="login-email" class="form-input" type="email" placeholder="sarah@block.xyz">
+        <label class="form-label">Block email</label>
+        <input id="login-email" class="form-input" type="email" placeholder="you@block.xyz">
       </div>
-      <button type="submit" class="btn-primary">Sign in</button>
+      <button type="submit" class="btn-primary" style="width:100%">Sign in →</button>
     </form>
-    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-      <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">Or sign in as a demo user:</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">
-        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
-                onclick="quickLogin('sarah_j','Sarah Johnson')">Sarah J</button>
-        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
-                onclick="quickLogin('marcus_t','Marcus Thompson')">Marcus T</button>
-        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
-                onclick="quickLogin('priya_k','Priya Kapoor')">Priya K</button>
-        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
-                onclick="quickLogin('devon_r','Devon Rivera')">Devon R</button>
-        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
-                onclick="quickLogin('alex_c','Alex Chen')">Alex C</button>
-        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
-                onclick="quickLogin('morgan_l','Morgan Lee')">Morgan L</button>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -629,12 +612,6 @@
 <script src="/static/app.js"></script>
 <script>
 // Extra helpers referenced in HTML
-
-function quickLogin(username, displayName) {
-  $('login-username').value = username;
-  $('login-display').value  = displayName;
-  login(username, displayName, '').catch(e => toast(e.message));
-}
 
 function askFromInput() {
   const input = $('chat-input');
