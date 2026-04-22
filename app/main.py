@@ -397,56 +397,122 @@ async def get_me(current_user=Depends(get_current_user)):
     return current_user
 
 # ── Databricks SSO ────────────────────────────────────────────────────────────
+def _resolve_databricks_identity(request: Request) -> dict:
+    """
+    Databricks Apps inject several headers. X-Forwarded-User may be a numeric
+    user ID or an email depending on the workspace config. We use the injected
+    OAuth access token to call the SCIM /Me endpoint which always returns the
+    full user profile (displayName, emails, userName).
+    Falls back gracefully through header → SCIM → derived values.
+    """
+    host = os.getenv("DATABRICKS_HOST", "")
+    access_token = (
+        request.headers.get("X-Forwarded-Access-Token") or
+        request.headers.get("x-forwarded-access-token") or
+        ""
+    ).strip()
+
+    # Prefer the SCIM /Me endpoint — most reliable source of truth
+    if host and access_token:
+        try:
+            resp = http_requests.get(
+                f"{host.rstrip('/')}/api/2.0/preview/scim/v2/Me",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=5,
+            )
+            if resp.status_code == 200:
+                me = resp.json()
+                # emails list: prefer "work" type, fall back to first
+                emails = me.get("emails", [])
+                email = next(
+                    (e["value"] for e in emails if e.get("primary")),
+                    emails[0]["value"] if emails else ""
+                )
+                display_name = me.get("displayName") or me.get("name", {}).get("formatted", "")
+                user_name    = me.get("userName", "")
+                # userName is often the email in Databricks
+                if not email and "@" in user_name:
+                    email = user_name
+                return {"email": email, "display_name": display_name, "user_name": user_name}
+        except Exception:
+            pass
+
+    # Fallback: read X-Forwarded-User / X-Forwarded-Email headers
+    forwarded_user = (
+        request.headers.get("X-Forwarded-User") or
+        request.headers.get("x-forwarded-user") or ""
+    ).strip()
+    forwarded_email = (
+        request.headers.get("X-Forwarded-Email") or
+        request.headers.get("x-forwarded-email") or ""
+    ).strip()
+
+    email = forwarded_email or (forwarded_user if "@" in forwarded_user else "")
+    return {"email": email, "display_name": "", "user_name": forwarded_user}
+
+
 @app.post("/api/auth/sso")
 async def sso_login(request: Request):
     """
     Called by the frontend on every page load.
-    Databricks Apps inject the authenticated user's email via X-Forwarded-User.
-    We auto-provision the user account on first login, then return a token.
-    Returns 403 when running outside Databricks (local dev) so the frontend
-    falls back to the manual login form gracefully.
+    Uses the injected Databricks OAuth token to look up the real user profile
+    via SCIM /Me, so display names and emails are always correct.
+    Returns 403 outside Databricks (local dev) so the frontend falls back to
+    the manual login form.
     """
-    email = (
-        request.headers.get("X-Forwarded-User") or
-        request.headers.get("x-forwarded-user") or
-        ""
-    ).strip()
+    identity = _resolve_databricks_identity(request)
+    email        = identity["email"]
+    display_name = identity["display_name"]
+    user_name    = identity["user_name"]
 
-    if not email:
+    # Need at least one identifier
+    if not email and not user_name:
         raise HTTPException(
             status_code=403,
-            detail="No SSO identity header — running in local/dev mode"
+            detail="No SSO identity — running in local/dev mode"
         )
 
-    # Derive a stable username from the Block email (e.g. jane.doe@block.xyz → jane_doe)
-    local_part  = email.split("@")[0]
+    # Stable username: prefer email local part, fall back to user_name
+    identifier = email or user_name
+    local_part  = identifier.split("@")[0]
     username    = re.sub(r"[^a-z0-9_]", "_", local_part.lower())
-    # Try to build a human-readable display name from the local part
-    display_name = " ".join(p.capitalize() for p in re.split(r"[._-]+", local_part))
+
+    # Display name: prefer SCIM displayName, derive from email/username otherwise
+    if not display_name:
+        display_name = " ".join(p.capitalize() for p in re.split(r"[._-]+", local_part))
+
+    # Lookup key: prefer email (stable), fall back to username
+    lookup_field = "email" if email else "username"
+    lookup_value = email    if email else username
 
     conn = get_db()
-    u = row(conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone())
+    u = row(conn.execute(f"SELECT * FROM users WHERE {lookup_field}=?", (lookup_value,)).fetchone())
     if not u:
-        # First-time SSO login — create the account
         try:
             conn.execute(
                 "INSERT INTO users (username, display_name, email) VALUES (?,?,?)",
-                (username, display_name, email)
+                (username, display_name, email or "")
             )
             conn.commit()
-            u = row(conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone())
+            u = row(conn.execute(f"SELECT * FROM users WHERE {lookup_field}=?", (lookup_value,)).fetchone())
         except sqlite3.IntegrityError:
-            # Username collision (two people with same first.last prefix) — append suffix
-            username = f"{username}_{u['id'] if u else _secrets.token_hex(3)}"
+            username = f"{username}_{_secrets.token_hex(3)}"
             conn.execute(
                 "INSERT INTO users (username, display_name, email) VALUES (?,?,?)",
-                (username, display_name, email)
+                (username, display_name, email or "")
             )
             conn.commit()
-            u = row(conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone())
+            u = row(conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone())
+    else:
+        # Update display name if SCIM gave us a better one and we didn't have it
+        if display_name and (not u.get("display_name") or u["display_name"] == u["username"]):
+            conn.execute("UPDATE users SET display_name=? WHERE id=?", (display_name, u["id"]))
+            conn.commit()
+            u["display_name"] = display_name
     conn.close()
 
     return {"token": encode_token(u["id"]), "user": u, "sso": True}
+
 
 @app.get("/api/config")
 async def get_config():
