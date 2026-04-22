@@ -5,3 +5,4 @@ anthropic>=0.90.0
 requests>=2.32.0
 sse-starlette>=1.6.0
 python-multipart>=0.0.9
+databricks-sdk>=0.40.0

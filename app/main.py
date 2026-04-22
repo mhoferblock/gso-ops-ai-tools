@@ -54,6 +54,13 @@ IS_DATABRICKS = bool(
     os.getenv("DATABRICKS_HOST")
 )
 
+# ── DB backend selection ──────────────────────────────────────────────────────
+# On Databricks: try Delta Lake first; fall back to SQLite+DBFS if SDK fails.
+# Local dev: always SQLite.
+import app.db_delta as _delta
+
+USE_DELTA = IS_DATABRICKS  # flip to False to force SQLite locally
+
 # ── Database ─────────────────────────────────────────────────────────────────
 def get_db():
     conn = sqlite3.connect(str(DB_PATH))
@@ -262,7 +269,11 @@ def backup_db_to_dbfs():
         print(f"[DB] Could not backup to DBFS: {ex}")
 
 def get_db_and_backup():
-    """Return a DB connection whose commit() also triggers a DBFS backup."""
+    """Return a DB connection whose commit() also triggers a DBFS backup.
+    On Databricks with Delta Lake available, returns a DeltaConn instead."""
+    if USE_DELTA and _delta.is_available():
+        return _delta.get_conn()
+
     class _BackupConn:
         """Thin wrapper: proxies everything to the real connection; backup on commit."""
         __slots__ = ("_c",)
@@ -289,8 +300,9 @@ def seed_bot_welcome():
     conn = get_db_and_backup()
     existing = conn.execute(
         "SELECT COUNT(*) FROM chat_messages WHERE is_bot=1"
-    ).fetchone()[0]
-    if existing == 0:
+    ).fetchone()
+    count = existing[0] if existing else 0
+    if count == 0:
         conn.execute(
             "INSERT INTO chat_messages (user_id,username,display_name,message,is_bot) "
             "VALUES (?,?,?,?,?)",
@@ -472,8 +484,13 @@ app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="stati
 
 @app.on_event("startup")
 async def on_startup():
-    restore_db_from_dbfs()   # pull latest backup from DBFS before init
-    init_db()
+    if USE_DELTA and _delta.is_available():
+        print("[startup] Delta Lake mode — initialising tables")
+        _delta.init_tables()
+    else:
+        print("[startup] SQLite mode — restoring from DBFS and initialising")
+        restore_db_from_dbfs()
+        init_db()
     seed_bot_welcome()
 
 @app.get("/", include_in_schema=False)
