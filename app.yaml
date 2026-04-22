@@ -1,37 +1,5 @@
-# Databricks Apps deployment configuration
-# Deploy with:  databricks apps deploy gso-ops-ai-tools --source-code-path .
-#
-# Before deploying:
-#   1. Create a Unity Catalog Volume for persistent storage (see README).
-#   2. Store your Anthropic API key in a Databricks secret scope (see README).
-#   3. Set the environment variables below (either here or in the Apps UI).
-
-command: ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+command: [".venv/bin/python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 env:
-  # ── Required ──────────────────────────────────────────────────────────────
-  # Path to a Unity Catalog Volume where the SQLite DB will be persisted.
-  # Create the volume first:
-  #   CREATE VOLUME main.gso_ops.app_data;
-  # Then set this to:  /Volumes/main/gso_ops/app_data/gso_tools.db
-  # (replace main / gso_ops with your catalog and schema names)
   - name: DB_PATH
-    value: "/Volumes/main/gso_ops/app_data/gso_tools.db"
-
-  # ── Secrets (set via Databricks secret scope, not plaintext) ──────────────
-  # Create scope:  databricks secrets create-scope gso-ops
-  # Add key:       databricks secrets put-secret gso-ops anthropic-api-key
-  - name: ANTHROPIC_API_KEY
-    valueFrom:
-      secretRef:
-        scope: gso-ops
-        key: anthropic-api-key
-
-  # Strong random key for token signing.
-  # Generate:  python3 -c "import secrets; print(secrets.token_hex(32))"
-  # Add key:   databricks secrets put-secret gso-ops secret-key
-  - name: SECRET_KEY
-    valueFrom:
-      secretRef:
-        scope: gso-ops
-        key: secret-key
+    value: "/tmp/gso_tools.db"
