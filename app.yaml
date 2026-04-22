@@ -9,15 +9,3 @@ env:
     valueFrom: anthropic-api-key
   - name: SECRET_KEY
     valueFrom: secret-key
-
-resources:
-  - name: anthropic-api-key
-    secret:
-      scope: gso-ops-ai-tools
-      key: anthropic-api-key
-      permission: READ
-  - name: secret-key
-    secret:
-      scope: gso-ops-ai-tools
-      key: secret-key
-      permission: READ
