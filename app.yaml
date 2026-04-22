@@ -3,3 +3,19 @@ command: [".venv/bin/python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0
 env:
   - name: DB_PATH
     value: "/tmp/gso_tools.db"
+  - name: ANTHROPIC_API_KEY
+    valueFrom: anthropic-api-key
+  - name: SECRET_KEY
+    valueFrom: secret-key
+
+resources:
+  - name: anthropic-api-key
+    secret:
+      scope: gso-ops-ai-tools
+      key: anthropic-api-key
+      permission: READ
+  - name: secret-key
+    secret:
+      scope: gso-ops-ai-tools
+      key: secret-key
+      permission: READ
