@@ -263,15 +263,26 @@ def backup_db_to_dbfs():
 
 def get_db_and_backup():
     """Return a DB connection whose commit() also triggers a DBFS backup."""
-    conn = get_db()
-    original_commit = conn.commit
-    def commit_and_backup():
-        original_commit()
-        if IS_DATABRICKS:
-            import threading
-            threading.Thread(target=backup_db_to_dbfs, daemon=True).start()
-    conn.commit = commit_and_backup
-    return conn
+    class _BackupConn:
+        """Thin wrapper: proxies everything to the real connection; backup on commit."""
+        __slots__ = ("_c",)
+        def __init__(self, c):
+            object.__setattr__(self, "_c", c)
+        def __getattr__(self, name):
+            return getattr(object.__getattribute__(self, "_c"), name)
+        def execute(self, *a, **kw):
+            return object.__getattribute__(self, "_c").execute(*a, **kw)
+        def executemany(self, *a, **kw):
+            return object.__getattribute__(self, "_c").executemany(*a, **kw)
+        def commit(self):
+            c = object.__getattribute__(self, "_c")
+            c.commit()
+            if IS_DATABRICKS:
+                import threading
+                threading.Thread(target=backup_db_to_dbfs, daemon=True).start()
+        def close(self):
+            object.__getattribute__(self, "_c").close()
+    return _BackupConn(get_db())
 
 def seed_bot_welcome():
     """Insert AOL AI's welcome message once so the chat room has context."""
