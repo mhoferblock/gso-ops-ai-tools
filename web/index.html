@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GSO Ops AI Tools</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<!-- ══ Navigation ══════════════════════════════════════════════════════════ -->
+<nav class="nav">
+  <a class="nav-logo" onclick="navigate('home')" style="cursor:pointer">
+    ⚡ GSO Ops <span>AI Tools</span>
+  </a>
+  <div class="nav-links">
+    <button class="nav-link active" data-section="home"          onclick="navigate('home')">Home</button>
+    <button class="nav-link"        data-section="discover"      onclick="navigate('discover')">Discover</button>
+    <button class="nav-link"        data-section="my-tools"      onclick="navigate('my-tools')">My Tools</button>
+    <button class="nav-link"        data-section="leaderboard"   onclick="navigate('leaderboard')">Leaderboard</button>
+    <button class="nav-link"        data-section="chat"          onclick="navigate('chat')">AOL AI Chat</button>
+    <button class="nav-link"        data-section="best-practices" onclick="navigate('best-practices')">Best Practices</button>
+  </div>
+  <div class="nav-right" id="nav-right">
+    <button class="btn-nav-login" onclick="openModal('login-modal')">Sign in</button>
+  </div>
+</nav>
+
+<!-- ══ Pages ═══════════════════════════════════════════════════════════════ -->
+<div class="page">
+
+  <!-- ── Home ──────────────────────────────────────────────────────────── -->
+  <section id="home" class="section active">
+    <!-- Hero -->
+    <div class="hero">
+      <h1>GSO Ops <span>AI Tools</span></h1>
+      <p>The community platform where the GSO team shares, discovers, and celebrates AI tools they've built.</p>
+      <div class="stats-row">
+        <div class="stat-item">
+          <div class="num" id="stat-tools">—</div>
+          <div class="lbl">Tools Submitted</div>
+        </div>
+        <div class="stat-item">
+          <div class="num" id="stat-users">—</div>
+          <div class="lbl">Contributors</div>
+        </div>
+        <div class="stat-item">
+          <div class="num" id="stat-votes">—</div>
+          <div class="lbl">Total Votes</div>
+        </div>
+        <div class="stat-item">
+          <div class="num" id="stat-clicks">—</div>
+          <div class="lbl">Tool Opens</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spotlight Carousel -->
+    <div class="spotlight">
+      <div class="tile-stripe" id="spotlight-stripe" style="position:absolute;top:0;left:0;right:0;height:6px;border-radius:var(--radius) var(--radius) 0 0"></div>
+      <div class="spotlight-badge" style="margin-top:6px">Community Spotlight</div>
+      <div class="spotlight-name" id="spotlight-name">Loading…</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px" id="spotlight-owner"></div>
+      <div class="spotlight-desc" id="spotlight-desc"></div>
+      <div class="spotlight-footer">
+        <button class="btn-open" id="spotlight-open" style="padding:8px 20px">Open Tool →</button>
+      </div>
+      <div class="spotlight-dots" id="spotlight-dots"></div>
+    </div>
+
+    <!-- Two-col: Recent tools + Feed -->
+    <div class="two-col">
+      <div>
+        <div class="section-header">
+          <h2 class="section-title">Latest Tools</h2>
+          <button class="section-link" onclick="navigate('discover')">View all →</button>
+        </div>
+        <div class="tools-grid" id="home-tools-grid">
+          <div class="empty"><p style="color:var(--text-muted)">Loading…</p></div>
+        </div>
+      </div>
+      <div>
+        <div class="section-header">
+          <h2 class="section-title">Live Activity</h2>
+        </div>
+        <div class="feed-container" id="activity-feed">
+          <div class="feed-item"><div class="feed-text" style="color:var(--text-muted)">Loading feed…</div></div>
+        </div>
+
+        <!-- Quick links -->
+        <div style="margin-top:20px;display:flex;flex-direction:column;gap:10px">
+          <a href="https://blockcell.sqprod.co/sites/ai-tool-guide/" target="_blank" class="link-card">
+            <span style="font-size:20px">📖</span>
+            <div>
+              <div style="font-weight:600;font-size:14px">AI Tool Guide</div>
+              <div style="font-size:12px;color:var(--text-muted)">Block's official AI tool directory</div>
+            </div>
+          </a>
+          <div class="link-card" onclick="navigate('leaderboard')" style="cursor:pointer">
+            <span style="font-size:20px">🏆</span>
+            <div>
+              <div style="font-weight:600;font-size:14px">Leaderboard</div>
+              <div style="font-size:12px;color:var(--text-muted)">Most used & most voted tools</div>
+            </div>
+          </div>
+          <div class="link-card" onclick="navigate('best-practices')" style="cursor:pointer">
+            <span style="font-size:20px">💡</span>
+            <div>
+              <div style="font-weight:600;font-size:14px">Best Practices</div>
+              <div style="font-size:12px;color:var(--text-muted)">Tips from the GSO community</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Discover ───────────────────────────────────────────────────────── -->
+  <section id="discover" class="section">
+    <div class="section-header" style="margin-bottom:24px">
+      <h1 class="section-title" style="font-size:26px">Discover AI Tools</h1>
+      <button class="btn-primary" style="width:auto;padding:9px 20px"
+              onclick="openModal('submit-modal')">+ Submit a Tool</button>
+    </div>
+    <div class="search-bar">
+      <input id="discover-search" class="form-input search-input" placeholder="Search tools…"
+             oninput="loadDiscover()">
+      <select id="discover-sort" class="search-select" onchange="loadDiscover()">
+        <option value="newest">Newest</option>
+        <option value="most_voted">Most Voted</option>
+        <option value="most_used">Most Used</option>
+      </select>
+    </div>
+    <div class="tools-grid" id="discover-grid">
+      <div class="empty"><p style="color:var(--text-muted)">Loading…</p></div>
+    </div>
+  </section>
+
+  <!-- ── My Tools ───────────────────────────────────────────────────────── -->
+  <section id="my-tools" class="section">
+    <div class="section-header" style="margin-bottom:24px">
+      <h1 class="section-title" style="font-size:26px">My Tools</h1>
+    </div>
+    <div class="tools-grid" id="my-tools-grid">
+      <div class="empty"><p style="color:var(--text-muted)">Loading…</p></div>
+    </div>
+  </section>
+
+  <!-- ── Leaderboard ────────────────────────────────────────────────────── -->
+  <section id="leaderboard" class="section">
+    <div class="section-header" style="margin-bottom:24px">
+      <h1 class="section-title" style="font-size:26px">Leaderboard</h1>
+      <span class="pill pill-warning">Updated live</span>
+    </div>
+    <div class="tabs" id="lb-tabs">
+      <button class="tab lb-tab-btn active" data-tab="most-used"   onclick="switchLBTab('most-used')">🔥 Most Used</button>
+      <button class="tab lb-tab-btn"        data-tab="most-voted"  onclick="switchLBTab('most-voted')">♥ Most Voted</button>
+      <button class="tab lb-tab-btn"        data-tab="weekly-history" onclick="switchLBTab('weekly-history')">🏆 Weekly Winners</button>
+    </div>
+    <div class="card">
+      <div id="most-used" class="lb-tab-content">
+        <div class="empty"><p>Loading…</p></div>
+      </div>
+      <div id="most-voted" class="lb-tab-content" style="display:none">
+        <div class="empty"><p>Loading…</p></div>
+      </div>
+      <div id="weekly-history" class="lb-tab-content" style="display:none">
+        <div class="empty"><p>Loading…</p></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:24px">
+      <div class="card-header">
+        <h3>Cast Your Weekly Vote</h3>
+        <span class="pill pill-info">Resets every Monday</span>
+      </div>
+      <div class="card-body">
+        <p style="font-size:14px;color:var(--text-muted);margin:0 0 16px">
+          Vote for the tool that made the biggest impact this week. One vote per person per week.
+        </p>
+        <div id="weekly-vote-tools" style="display:flex;flex-direction:column;gap:8px">
+          <!-- Loaded dynamically -->
+        </div>
+        <button class="btn-secondary" style="margin-top:16px" onclick="loadWeeklyVoteTools()">
+          Load tools to vote on
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Chat ───────────────────────────────────────────────────────────── -->
+  <section id="chat" class="section">
+    <div style="margin-bottom:20px">
+      <h1 style="font-size:26px;font-weight:800;margin:0 0 6px">AOL AI Community Chat</h1>
+      <p style="color:var(--text-muted);font-size:14px;margin:0">
+        Chat with the GSO team. Start your message with <code>@AOL_AI</code> or <code>?</code> to ask the AI assistant.
+      </p>
+    </div>
+    <div class="aol-window">
+      <div class="aol-titlebar">
+        <span>⚡ GSO Ops AI Tools — Community Chat</span>
+        <div class="aol-titlebar-btns">
+          <div class="aol-titlebar-btn">_</div>
+          <div class="aol-titlebar-btn">□</div>
+          <div class="aol-titlebar-btn">×</div>
+        </div>
+      </div>
+      <div class="aol-body">
+        <!-- Buddy list -->
+        <div class="aol-buddylist">
+          <div class="aol-buddy-header">Online Now</div>
+          <div id="buddy-list">
+            <div class="aol-buddy">
+              <div class="aol-buddy-dot"></div>
+              <span>Loading…</span>
+            </div>
+          </div>
+        </div>
+        <!-- Chat panel -->
+        <div class="aol-chat-panel">
+          <div class="aol-chat-header">
+            GSO Community Room · Type @AOL_AI to ask the AI
+          </div>
+          <div class="aol-messages" id="aol-messages">
+            <!-- messages rendered here -->
+          </div>
+          <div class="aol-input-bar">
+            <input id="chat-input" class="aol-input" placeholder="Type a message…"
+                   onkeydown="chatKeydown(event)" maxlength="500">
+            <button class="aol-send-btn" onclick="sendChat()">Send</button>
+            <button class="aol-ask-btn"  onclick="askFromInput()">Ask AI</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px;font-size:12px;color:var(--text-muted);text-align:center;font-family:'Courier New',monospace">
+      You've got AI! ✉ · Messages update every 4 seconds
+    </div>
+  </section>
+
+  <!-- ── Best Practices ────────────────────────────────────────────────── -->
+  <section id="best-practices" class="section">
+    <div class="section-header" style="margin-bottom:8px">
+      <h1 class="section-title" style="font-size:26px">Best Practices</h1>
+    </div>
+    <p style="color:var(--text-muted);font-size:14px;margin:0 0 24px">
+      Share what's working. Read what others have learned. Also see the
+      <a href="https://blockcell.sqprod.co/sites/ai-tool-guide/" target="_blank"
+         style="color:var(--accent);text-decoration:none;font-weight:600">
+        AI Tool Guide ↗
+      </a>
+      for Block's official guidance.
+    </p>
+    <!-- Submit form -->
+    <div class="card" style="margin-bottom:28px">
+      <div class="card-header"><h3>Share a Best Practice</h3></div>
+      <div class="card-body">
+        <form onsubmit="submitPractice(event)">
+          <div class="form-group">
+            <label class="form-label">Title</label>
+            <input id="practice-title" class="form-input" placeholder="e.g. Always validate AI output before production" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Details</label>
+            <textarea id="practice-content" class="form-textarea" placeholder="Share what you've learned…" required></textarea>
+          </div>
+          <button type="submit" class="btn-primary" style="width:auto;padding:10px 24px">Post Practice</button>
+        </form>
+      </div>
+    </div>
+    <!-- List -->
+    <div id="practices-list">
+      <div class="empty"><p>Loading…</p></div>
+    </div>
+  </section>
+
+  <!-- ── Profile — Me ───────────────────────────────────────────────────── -->
+  <section id="profile-me" class="section">
+    <div id="profile-me-content">
+      <div class="empty"><p>Loading…</p></div>
+    </div>
+  </section>
+
+  <!-- ── Profile — View ─────────────────────────────────────────────────── -->
+  <section id="profile-view" class="section">
+    <div id="profile-view-content">
+      <div class="empty"><p>Loading…</p></div>
+    </div>
+  </section>
+
+</div><!-- /page -->
+
+<!-- ══ Modals ══════════════════════════════════════════════════════════════ -->
+
+<!-- Login Modal -->
+<div id="login-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('login-modal')">×</button>
+    <div class="modal-title">Sign in to GSO Ops AI Tools</div>
+    <div class="modal-subtitle">
+      Enter your Block username and display name. In production this uses Databricks SSO.
+    </div>
+    <form onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label class="form-label">Username (no spaces)</label>
+        <input id="login-username" class="form-input" placeholder="e.g. sarah_j" required
+               pattern="[a-zA-Z0-9_]+" title="Letters, numbers, and underscores only">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Display name</label>
+        <input id="login-display" class="form-input" placeholder="e.g. Sarah Johnson" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email (optional)</label>
+        <input id="login-email" class="form-input" type="email" placeholder="sarah@block.xyz">
+      </div>
+      <button type="submit" class="btn-primary">Sign in</button>
+    </form>
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">Or sign in as a demo user:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
+                onclick="quickLogin('sarah_j','Sarah Johnson')">Sarah J</button>
+        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
+                onclick="quickLogin('marcus_t','Marcus Thompson')">Marcus T</button>
+        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
+                onclick="quickLogin('priya_k','Priya Kapoor')">Priya K</button>
+        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
+                onclick="quickLogin('devon_r','Devon Rivera')">Devon R</button>
+        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
+                onclick="quickLogin('alex_c','Alex Chen')">Alex C</button>
+        <button class="btn-secondary" style="padding:5px 12px;font-size:12px"
+                onclick="quickLogin('morgan_l','Morgan Lee')">Morgan L</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Submit Tool Modal -->
+<div id="submit-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:580px">
+    <button class="modal-close" onclick="closeModal('submit-modal')">×</button>
+    <div class="modal-title">Submit Your AI Tool</div>
+    <div class="modal-subtitle">Drop a link and let AI write the description for you.</div>
+    <form onsubmit="submitTool(event)">
+      <div class="form-group">
+        <label class="form-label">Tool URL</label>
+        <div style="display:flex;gap:8px">
+          <input id="submit-url" class="form-input" placeholder="https://…" required style="flex:1">
+          <button type="button" id="summarize-btn" class="btn-secondary" style="white-space:nowrap"
+                  onclick="autoSummarize()">Auto-Summarize with AI ✨</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tool Name</label>
+        <input id="submit-name" class="form-input" placeholder="e.g. Transaction Anomaly Detector" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Short description (one line)</label>
+        <input id="submit-desc" class="form-input" placeholder="e.g. Detects unusual patterns in real-time transaction data">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Full summary</label>
+        <textarea id="submit-summary" class="form-textarea" placeholder="Detailed description of what your tool does, who it helps, and how it works…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tags (comma-separated)</label>
+        <input id="submit-tags" class="form-input" placeholder="e.g. databricks, claude, automation">
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" onclick="closeModal('submit-modal')">Cancel</button>
+        <button type="submit" id="submit-btn" class="btn-primary">Submit Tool</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Weekly Winner Modal -->
+<div id="winner-modal-overlay" class="modal-overlay hidden">
+  <div class="winner-modal">
+    <div style="font-size:64px;margin-bottom:16px">🏆</div>
+    <div class="winner-label">Tool of the Week</div>
+    <div class="winner-name" id="winner-tool-name">Loading…</div>
+    <div class="winner-owner" id="winner-owner-name"></div>
+    <div class="winner-desc" id="winner-tool-desc"></div>
+    <div style="display:flex;gap:24px;justify-content:center;margin-bottom:20px">
+      <div>
+        <div style="font-size:24px;font-weight:800;color:#F59E0B" id="winner-votes">—</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.55)">votes</div>
+      </div>
+      <div>
+        <div style="font-size:14px;color:rgba(255,255,255,.65);margin-top:4px">Week of</div>
+        <div style="font-size:14px;font-weight:600" id="winner-week">—</div>
+      </div>
+    </div>
+    <div class="winner-countdown">
+      <div style="font-size:13px;color:rgba(255,255,255,.7)">
+        Auto-closing in <span id="winner-countdown-num">10</span>s
+      </div>
+      <div class="countdown-bar-track">
+        <div class="countdown-bar" id="countdown-bar"></div>
+      </div>
+    </div>
+    <button class="btn-winner-dismiss"
+            onclick="dismissWinner(null)">
+      Got it! Close ×
+    </button>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+// Extra helpers referenced in HTML
+
+function quickLogin(username, displayName) {
+  $('login-username').value = username;
+  $('login-display').value  = displayName;
+  login(username, displayName, '').catch(e => toast(e.message));
+}
+
+function askFromInput() {
+  const input = $('chat-input');
+  if (!input.value.trim()) {
+    input.value = '@AOL_AI ';
+  } else if (!input.value.startsWith('@AOL_AI') && !input.value.startsWith('?')) {
+    input.value = '@AOL_AI ' + input.value;
+  }
+  input.focus();
+}
+
+async function loadWeeklyVoteTools() {
+  if (!state.user) { openModal('login-modal'); return; }
+  try {
+    const tools = await api.get('/api/tools?sort=most_voted');
+    const el = $('weekly-vote-tools');
+    el.innerHTML = tools.slice(0, 8).map(t => `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px;
+                  background:var(--bg);border-radius:8px">
+        <div style="flex:1;font-weight:600;font-size:14px">${esc(t.name)}</div>
+        <div style="font-size:12px;color:var(--text-muted)">by ${esc(t.owner_name||t.username)}</div>
+        <button class="btn-vote" onclick="castWeeklyVote(${t.id}, this)">
+          🏆 Vote for this week
+        </button>
+      </div>`).join('');
+  } catch (e) {
+    toast('Error: ' + e.message);
+  }
+}
+
+async function castWeeklyVote(toolId, btn) {
+  if (!state.user) { openModal('login-modal'); return; }
+  try {
+    await api.post(`/api/weekly-vote/${toolId}`, {});
+    btn.textContent = '✓ Voted!';
+    btn.disabled = true;
+    btn.classList.add('voted');
+    toast('Weekly vote cast! 🏆');
+  } catch (e) {
+    toast(e.message);
+  }
+}
+</script>
+
+</body>
+</html>
