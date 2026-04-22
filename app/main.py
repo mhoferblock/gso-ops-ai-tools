@@ -153,180 +153,24 @@ def init_db():
     conn.commit()
     conn.close()
 
-def seed_demo_data():
+# seed_demo_data removed — app starts fresh for production use.
+
+def seed_bot_welcome():
+    """Insert AOL AI's welcome message once so the chat room has context."""
     conn = get_db()
-    if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] > 0:
-        conn.close()
-        return
-
-    users = [
-        ("sarah_j",  "Sarah Johnson",  "sarah.j@block.xyz",
-         "Senior Data Analyst who loves building AI workflows to automate repetitive reporting tasks.",
-         "AI-powered anomaly detection for transaction data"),
-        ("marcus_t", "Marcus Thompson","marcus.t@block.xyz",
-         "Operations specialist passionate about using Claude to streamline GSO processes.",
-         "Claude-based SOC analysis assistant"),
-        ("priya_k",  "Priya Kapoor",   "priya.k@block.xyz",
-         "Product ops manager using AI to connect the dots across teams and tools.",
-         "AI meeting summarizer + action item tracker"),
-        ("devon_r",  "Devon Rivera",   "devon.r@block.xyz",
-         "Data engineer building pipelines and AI tools to make data more accessible.",
-         "Natural language SQL query builder"),
-        ("alex_c",   "Alex Chen",      "alex.c@block.xyz",
-         "Strategy analyst using AI to distill complex market signals into clear insights.",
-         "Competitive intelligence dashboard"),
-        ("morgan_l", "Morgan Lee",     "morgan.l@block.xyz",
-         "Trust & Safety analyst leveraging AI to move faster on investigations.",
-         "Risk signal pattern recognition tool"),
-    ]
-    for u in users:
+    existing = conn.execute(
+        "SELECT COUNT(*) FROM chat_messages WHERE is_bot=1"
+    ).fetchone()[0]
+    if existing == 0:
         conn.execute(
-            "INSERT INTO users (username,display_name,email,bio,favorite_ai_project) VALUES (?,?,?,?,?)", u)
-    conn.commit()
-
-    uid = {r["username"]: r["id"] for r in
-           rows(conn.execute("SELECT id,username FROM users").fetchall())}
-
-    tools = [
-        (uid["sarah_j"],  "Transaction Anomaly Detector",
-         "https://databricks.com",
-         "Detects unusual transaction patterns using ML",
-         "An AI-powered tool that monitors real-time transaction data and flags anomalies using a fine-tuned isolation forest model. Integrates with Databricks and sends Slack alerts when suspicious patterns are detected. Reduces manual review time by 70%.",
-         '["databricks","ml","transactions"]', 42, 18, 1),
-        (uid["marcus_t"], "Claude SOC Assistant",
-         "https://claude.ai",
-         "AI copilot for Security Operations Center analysts",
-         "A Claude-powered assistant embedded in the SOC workflow that helps analysts triage alerts, look up historical context, draft incident reports, and suggest remediation steps. Connected to internal runbooks and Jira.",
-         '["claude","security","productivity"]', 38, 15, 1),
-        (uid["priya_k"],  "Meeting Intelligence Hub",
-         "https://databricks.com",
-         "AI meeting summarizer with action item extraction",
-         "Transcribes Zoom/Meet recordings, generates structured summaries, extracts action items with owners, and posts them to Confluence and Slack. Uses Whisper for transcription and Claude for summarization.",
-         '["meetings","productivity","claude"]', 31, 12, 0),
-        (uid["devon_r"],  "NL-SQL Builder",
-         "https://databricks.com",
-         "Ask questions about your data in plain English",
-         "A natural language interface to your Databricks SQL warehouse. Type questions like 'top 10 markets by GMV last quarter' and get instant SQL plus a visualization. Supports schema exploration and query explanation.",
-         '["databricks","sql","nlp"]', 27, 11, 1),
-        (uid["alex_c"],   "Competitive Intel Dashboard",
-         "https://databricks.com",
-         "Real-time competitive landscape tracker powered by AI",
-         "Scrapes public sources to track competitor moves, summarizes findings with Claude, and presents them in an interactive dashboard. Weekly digest emails delivered to stakeholders automatically.",
-         '["research","competitive-intel","automation"]', 19, 8, 0),
-        (uid["morgan_l"], "Risk Signal Analyzer",
-         "https://databricks.com",
-         "Pattern recognition for Trust & Safety teams",
-         "Aggregates risk signals across multiple data sources and uses ML to surface high-confidence patterns. Helps T&S analysts prioritize their work queue and see the full picture on any entity.",
-         '["trust-safety","ml","analytics"]', 24, 10, 0),
-        (uid["sarah_j"],  "Report Autopilot",
-         "https://databricks.com",
-         "Automated weekly business report generator",
-         "Pulls data from Snowflake, generates narrative insights with Claude, and delivers formatted reports to stakeholders every Monday morning. Supports custom templates and follow-up questions.",
-         '["reporting","automation","claude"]', 15, 6, 0),
-        (uid["devon_r"],  "Data Dictionary Builder",
-         "https://databricks.com",
-         "Auto-generates documentation for your Delta tables",
-         "Scans your Unity Catalog, samples table data, and uses Claude to generate human-readable descriptions for tables and columns. Keeps your data dictionary up to date automatically.",
-         '["databricks","documentation","unity-catalog"]', 12, 5, 0),
-    ]
-    for t in tools:
-        conn.execute(
-            "INSERT INTO tools "
-            "(owner_id,name,url,description,summary,tags,click_count,vote_count,is_featured) "
-            "VALUES (?,?,?,?,?,?,?,?,?)", t)
-    conn.commit()
-
-    tids = [r["id"] for r in rows(conn.execute("SELECT id FROM tools").fetchall())]
-    for i, user_id in enumerate(uid.values()):
-        for tid in tids[:3 + (i % 4)]:
-            conn.execute("INSERT OR IGNORE INTO votes (user_id,tool_id) VALUES (?,?)", (user_id, tid))
-    conn.commit()
-
-    today = date.today()
-    last_mon = today - timedelta(days=today.weekday() + 7)
-    conn.execute(
-        "INSERT INTO weekly_winners (tool_id,week_start,votes_at_time) VALUES (?,?,?)",
-        (tids[0], last_mon.isoformat(), 42))
-    conn.commit()
-
-    chat_seed = [
-        (uid["sarah_j"],  "sarah_j",  "Sarah Johnson",
-         "Hey everyone! Just deployed Transaction Anomaly Detector v2.0 — now with 95% accuracy!", 0),
-        (uid["marcus_t"], "marcus_t", "Marcus Thompson",
-         "Incredible Sarah! The new Claude model improvements in my SOC Assistant are massive too.", 0),
-        (uid["priya_k"],  "priya_k",  "Priya Kapoor",
-         "Has anyone tried connecting Claude to Confluence? Trying to make the Meeting Hub smarter.", 0),
-        (None, "AOL_AI", "AOL AI",
-         "Welcome to GSO Ops AI Tools! I'm AOL AI, your resident assistant. Ask me anything about AI tools, prompting, Databricks, or how to get started building. IM me anytime!", 1),
-        (uid["devon_r"],  "devon_r",  "Devon Rivera",
-         "NL-SQL Builder now supports Delta Live Tables queries! Huge for streaming use cases.", 0),
-        (uid["alex_c"],   "alex_c",   "Alex Chen",
-         "Can the leaderboard surface tools by team/domain? That would be super useful for discovery.", 0),
-    ]
-    for m in chat_seed:
-        conn.execute(
-            "INSERT INTO chat_messages (user_id,username,display_name,message,is_bot) VALUES (?,?,?,?,?)", m)
-    conn.commit()
-
-    activities = [
-        ("tool_added", uid["devon_r"],  tids[7], "Devon Rivera added Data Dictionary Builder"),
-        ("tool_added", uid["sarah_j"],  tids[6], "Sarah Johnson added Report Autopilot"),
-        ("vote",       uid["morgan_l"], tids[0], "Morgan Lee voted for Transaction Anomaly Detector"),
-        ("tool_added", uid["morgan_l"], tids[5], "Morgan Lee added Risk Signal Analyzer"),
-        ("vote",       uid["alex_c"],   tids[1], "Alex Chen voted for Claude SOC Assistant"),
-        ("tool_added", uid["alex_c"],   tids[4], "Alex Chen added Competitive Intel Dashboard"),
-        ("tool_added", uid["priya_k"],  tids[2], "Priya Kapoor added Meeting Intelligence Hub"),
-        ("vote",       uid["devon_r"],  tids[2], "Devon Rivera voted for Meeting Intelligence Hub"),
-    ]
-    for a in activities:
-        conn.execute(
-            "INSERT INTO activity_feed (event_type,user_id,tool_id,message) VALUES (?,?,?,?)", a)
-    conn.commit()
-
-    practices = [
-        (uid["sarah_j"],  "Sarah Johnson",
-         "Always validate AI output before production",
-         "Before deploying any AI tool to production, run a validation suite. For Claude integrations, test edge cases with adversarial inputs. For ML models, maintain a holdout test set you never train on. Document your validation methodology — future-you will thank you."),
-        (uid["marcus_t"], "Marcus Thompson",
-         "Use structured outputs for reliability",
-         "When using Claude or other LLMs, always request structured JSON output rather than free-form text when you need to parse results. This dramatically reduces parsing errors. Pydantic + Claude's structured output feature is a winning combo that makes your tools production-ready."),
-        (uid["devon_r"],  "Devon Rivera",
-         "Version control your prompts",
-         "Treat your LLM prompts like code. Version them in Git, write tests for them, and review changes carefully. A small change to a system prompt can have huge downstream effects. Use a prompt registry pattern and track performance metrics per version."),
-    ]
-    for p in practices:
-        conn.execute(
-            "INSERT INTO best_practices (user_id,author_name,title,content) VALUES (?,?,?,?)", p)
-    conn.commit()
-
-    # Seed board notes
-    import random
-    board_notes = [
-        (uid["sarah_j"],  "Sarah Johnson",
-         "New anomaly model is live! 🚀 95% precision on the holdout set.",
-         "#FFEF5E", "🚀", "", 80, 60, -2.5),
-        (uid["marcus_t"], "Marcus Thompson",
-         "Reminder: Claude SOC demo is Thursday 2pm PT. Come see it live!",
-         "#B8E0FF", "📅", "", 280, 140, 1.8),
-        (uid["priya_k"],  "Priya Kapoor",
-         "Meeting Hub just got Confluence integration! Link in Slack.",
-         "#A8F5A0", "✅", "", 520, 80, -1.2),
-        (uid["devon_r"],  "Devon Rivera",
-         "NL-SQL now supports DLT! Ask it anything about your streaming tables.",
-         "#FFBF69", "💡", "", 160, 300, 3.0),
-        (uid["alex_c"],   "Alex Chen",
-         "Great quarter everyone. Competitive dashboard showed 3 new signals this week.",
-         "#E8B4F8", "📊", "", 440, 260, -3.5),
-        (uid["morgan_l"], "Morgan Lee",
-         "T&S risk model update — false positive rate down 40%. Big win!",
-         "#FF8DA1", "🎉", "", 680, 120, 2.1),
-    ]
-    for n in board_notes:
-        conn.execute("""
-            INSERT INTO board_notes
-            (user_id,author_name,message,color,emoji,drawing_data,x_pos,y_pos,rotation)
-            VALUES (?,?,?,?,?,?,?,?,?)""", n)
-    conn.commit()
+            "INSERT INTO chat_messages (user_id,username,display_name,message,is_bot) "
+            "VALUES (?,?,?,?,?)",
+            (None, "AOL_AI", "AOL AI",
+             "Welcome to GSO Ops AI Tools! I'm AOL AI — your resident AI assistant. "
+             "Type @AOL_AI in any message to ask me anything about AI tools, prompting, "
+             "Databricks, or how to get started building. IM me anytime! 👋", 1)
+        )
+        conn.commit()
     conn.close()
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
@@ -497,7 +341,7 @@ app.mount("/static", StaticFiles(directory=str(WEB_DIR / "static")), name="stati
 @app.on_event("startup")
 async def on_startup():
     init_db()
-    seed_demo_data()
+    seed_bot_welcome()
 
 @app.get("/", include_in_schema=False)
 async def serve_spa():

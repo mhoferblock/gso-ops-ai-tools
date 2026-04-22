@@ -893,6 +893,7 @@ async function init() {
   if (state.user) {
     setTimeout(checkWinner, 1500);
   }
+  initWalkthrough();
 }
 
 document.addEventListener('DOMContentLoaded', init);
@@ -1210,3 +1211,98 @@ async function deleteBoardNote(e, noteId, el) {
   } catch (err) { toast(err.message); }
 }
 
+
+// ── First-Time Walkthrough ────────────────────────────────────────────────
+const WT_KEY      = 'gso_walkthrough_v1';
+const WT_TOTAL    = 8;
+let   _wtStep     = 1;
+
+function initWalkthrough() {
+  if (localStorage.getItem(WT_KEY)) return;
+  // Short delay so the page renders first
+  setTimeout(() => {
+    const overlay = document.getElementById('walkthrough-overlay');
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+    _wtStep = 1;
+    _renderWtStep();
+  }, 600);
+}
+
+function _renderWtStep() {
+  // Activate correct step
+  document.querySelectorAll('.wt-step').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.step) === _wtStep);
+  });
+
+  // Dots
+  const dotsEl = document.getElementById('wt-dots');
+  if (dotsEl) {
+    dotsEl.innerHTML = Array.from({length: WT_TOTAL}, (_, i) =>
+      `<div class="wt-dot${i + 1 === _wtStep ? ' active' : ''}" onclick="walkthroughGoTo(${i + 1})"></div>`
+    ).join('');
+  }
+
+  // Back button
+  const backBtn = document.getElementById('wt-back');
+  if (backBtn) backBtn.style.display = _wtStep > 1 ? 'inline-flex' : 'none';
+
+  // Next button label
+  const nextBtn = document.getElementById('wt-next');
+  if (nextBtn) {
+    if (_wtStep === WT_TOTAL) {
+      nextBtn.textContent = "Let's Go! 🚀";
+      nextBtn.classList.add('finish');
+    } else {
+      nextBtn.textContent = 'Next →';
+      nextBtn.classList.remove('finish');
+    }
+  }
+
+  // Animate final icon on last step
+  if (_wtStep === WT_TOTAL) {
+    const icon = document.getElementById('wt-final-icon');
+    if (icon) {
+      icon.style.animation = 'none';
+      requestAnimationFrame(() => {
+        icon.style.animation = 'wt-slide-up 0.4s cubic-bezier(0.34,1.56,0.64,1)';
+      });
+      if (typeof confetti === 'function') {
+        confetti({ particleCount: 60, spread: 80, origin: { y: 0.7 }, zIndex: 10000 });
+      }
+    }
+  }
+}
+
+function walkthroughNext() {
+  if (_wtStep >= WT_TOTAL) {
+    completeWalkthrough();
+  } else {
+    _wtStep++;
+    _renderWtStep();
+  }
+}
+
+function walkthroughBack() {
+  if (_wtStep > 1) { _wtStep--; _renderWtStep(); }
+}
+
+function walkthroughGoTo(step) {
+  _wtStep = step;
+  _renderWtStep();
+}
+
+function skipWalkthrough()    { completeWalkthrough(); }
+
+function completeWalkthrough() {
+  localStorage.setItem(WT_KEY, '1');
+  const overlay = document.getElementById('walkthrough-overlay');
+  if (!overlay) return;
+  overlay.style.transition = 'opacity .3s';
+  overlay.style.opacity    = '0';
+  setTimeout(() => { overlay.style.display = 'none'; overlay.style.opacity = '1'; }, 300);
+  // Prompt sign-in if not logged in
+  if (!state.user) {
+    setTimeout(() => openModal('login-modal'), 400);
+  }
+}

@@ -515,6 +515,117 @@
   </div>
 </div>
 
+<!-- ── First-Time Walkthrough Overlay ──────────────────────────────── -->
+<div id="walkthrough-overlay" class="walkthrough-overlay" style="display:none">
+  <div class="walkthrough-card">
+    <button class="walkthrough-skip" onclick="skipWalkthrough()">Skip tour ×</button>
+
+    <!-- Step 1: Welcome -->
+    <div class="wt-step active" data-step="1">
+      <div class="wt-icon" style="background:linear-gradient(135deg,#6C63FF,#8B5CF6)">⚡</div>
+      <h2 class="wt-title">Welcome to GSO Ops AI Tools</h2>
+      <p class="wt-desc">Your team's home for sharing, discovering, and celebrating the AI tools built right here at Block GSO. Everything your colleagues are building — in one place.</p>
+      <div class="wt-visual">
+        <div class="wt-pill" style="background:#6C63FF22;color:#6C63FF">🔍 Discover</div>
+        <div class="wt-pill" style="background:#10B98122;color:#059669">🚀 Submit</div>
+        <div class="wt-pill" style="background:#F59E0B22;color:#D97706">🏆 Leaderboard</div>
+        <div class="wt-pill" style="background:#EF444422;color:#DC2626">💬 Chat</div>
+      </div>
+    </div>
+
+    <!-- Step 2: Discover -->
+    <div class="wt-step" data-step="2">
+      <div class="wt-icon" style="background:linear-gradient(135deg,#06B6D4,#0EA5E9)">🔍</div>
+      <h2 class="wt-title">Discover AI Tools</h2>
+      <p class="wt-desc">Browse every AI tool your GSO colleagues have built. Sort by newest, most voted, or most clicked. Found something great? Upvote it to boost it on the leaderboard.</p>
+      <div class="wt-mockup">
+        <div class="wt-mock-tile">📊 <strong>Data Tool</strong><br><span>by Your Colleague</span></div>
+        <div class="wt-mock-tile">🤖 <strong>AI Assistant</strong><br><span>by The Team</span></div>
+        <div class="wt-mock-tile">⚡ <strong>Automation</strong><br><span>by Someone</span></div>
+      </div>
+    </div>
+
+    <!-- Step 3: Submit -->
+    <div class="wt-step" data-step="3">
+      <div class="wt-icon" style="background:linear-gradient(135deg,#10B981,#059669)">🚀</div>
+      <h2 class="wt-title">Share What You've Built</h2>
+      <p class="wt-desc">Drop a URL to your AI tool. Claude reads the page and auto-writes the description, tags, and summary for you. One click and your tool is live for the whole team to discover.</p>
+      <div class="wt-steps-list">
+        <div class="wt-step-item"><span class="wt-step-num">1</span>Paste your tool's URL</div>
+        <div class="wt-step-item"><span class="wt-step-num">2</span>Claude auto-fills the details</div>
+        <div class="wt-step-item"><span class="wt-step-num">3</span>Hit Submit — you're live! 🎉</div>
+      </div>
+    </div>
+
+    <!-- Step 4: Leaderboard -->
+    <div class="wt-step" data-step="4">
+      <div class="wt-icon" style="background:linear-gradient(135deg,#F59E0B,#EF4444)">🏆</div>
+      <h2 class="wt-title">Vote &amp; Compete</h2>
+      <p class="wt-desc">Upvote tools you love. Every week, cast your vote for <strong>Tool of the Week</strong>. On Monday, the winner gets a confetti celebration front and center for everyone who logs in.</p>
+      <div class="wt-visual">
+        <div class="wt-rank-item"><span class="wt-rank-badge gold">🥇</span><span>Most Voted Tool</span></div>
+        <div class="wt-rank-item"><span class="wt-rank-badge silver">🥈</span><span>Runner Up</span></div>
+        <div class="wt-rank-item"><span class="wt-rank-badge bronze">🥉</span><span>#3 This Week</span></div>
+      </div>
+    </div>
+
+    <!-- Step 5: AOL AI Chat -->
+    <div class="wt-step" data-step="5">
+      <div class="wt-icon" style="background:linear-gradient(135deg,#3B82F6,#8B5CF6)">💬</div>
+      <h2 class="wt-title">The AOL AI Chat Room</h2>
+      <p class="wt-desc">A retro AIM-style community chat where the team talks all things AI. Type <strong>@AOL_AI</strong> anywhere in your message and our Claude-powered assistant will answer your question.</p>
+      <div class="wt-chat-preview">
+        <div class="wt-chat-bubble other"><strong>Teammate:</strong> Anyone tried Claude for SQL?</div>
+        <div class="wt-chat-bubble you"><strong>@AOL_AI</strong> Absolutely — here's how to do it…</div>
+      </div>
+    </div>
+
+    <!-- Step 6: Cork Board -->
+    <div class="wt-step" data-step="6">
+      <div class="wt-icon" style="background:linear-gradient(135deg,#F59E0B,#92400E)">📌</div>
+      <h2 class="wt-title">The Virtual Cork Board</h2>
+      <p class="wt-desc">Pin colorful post-it notes for the team. Write a message, add emojis, draw on it, pick a color — then drag it anywhere on the board. Notes expire after 7 days, keeping it fresh.</p>
+      <div class="wt-visual">
+        <div class="wt-sticky" style="background:#FFEF5E">📝 Quick note here!<br><small>— You</small></div>
+        <div class="wt-sticky" style="background:#A8F5A0">✅ Done with sprint<br><small>— Colleague</small></div>
+        <div class="wt-sticky" style="background:#B8E0FF">💡 New idea!<br><small>— Someone</small></div>
+      </div>
+    </div>
+
+    <!-- Step 7: Best Practices -->
+    <div class="wt-step" data-step="7">
+      <div class="wt-icon" style="background:linear-gradient(135deg,#EC4899,#8B5CF6)">💡</div>
+      <h2 class="wt-title">Best Practices</h2>
+      <p class="wt-desc">Share the prompt tricks, workflow patterns, and lessons learned that make your AI tools better. Read what your colleagues have figured out. Collective intelligence at work.</p>
+      <div class="wt-steps-list">
+        <div class="wt-step-item"><span class="wt-step-num" style="background:#EC489922">💡</span>Share a tip with the team</div>
+        <div class="wt-step-item"><span class="wt-step-num" style="background:#8B5CF622">📖</span>Read what others have learned</div>
+        <div class="wt-step-item"><span class="wt-step-num" style="background:#10B98122">🤝</span>Grow together</div>
+      </div>
+    </div>
+
+    <!-- Step 8: Get Started -->
+    <div class="wt-step" data-step="8">
+      <div class="wt-icon" style="background:linear-gradient(135deg,#6C63FF,#EC4899)" id="wt-final-icon">🎉</div>
+      <h2 class="wt-title">Ready to dive in?</h2>
+      <p class="wt-desc">Sign in with your Block credentials to submit tools, vote, chat, and pin notes. The whole GSO team is building in the open — come join them.</p>
+      <div class="wt-visual">
+        <div style="font-size:48px;margin-bottom:8px">🚀</div>
+        <div style="font-size:14px;color:var(--text-muted)">Let's build something great together.</div>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="wt-nav">
+      <div class="wt-dots" id="wt-dots"></div>
+      <div class="wt-buttons">
+        <button class="btn-outline wt-back" id="wt-back" onclick="walkthroughBack()" style="display:none">← Back</button>
+        <button class="btn-primary wt-next" id="wt-next" onclick="walkthroughNext()">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="/static/app.js"></script>
 <script>
 // Extra helpers referenced in HTML
