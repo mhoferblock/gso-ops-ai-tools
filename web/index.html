@@ -313,20 +313,17 @@
 
       <!-- Right: note tray -->
       <div class="board-tray">
-        <div style="font-size:17px;font-weight:800">Post-it Notes</div>
-        <p style="font-size:12px;color:var(--text-muted);margin:0">Color · write · draw · emoji · pin!</p>
 
-        <!-- Stack visual — click to reset -->
-        <div class="tray-stack-container" onclick="resetEditor()" title="Click to start fresh">
-          <div class="tray-stack-note" style="background:#A8F5A0;transform:rotate(-4deg);top:14px;left:14px"></div>
-          <div class="tray-stack-note" style="background:#FF8DA1;transform:rotate(2.5deg);top:8px;left:8px"></div>
-          <div class="tray-stack-note" style="background:#B8E0FF;transform:rotate(-1.5deg);top:4px;left:4px"></div>
-          <div class="tray-stack-note top-note" style="background:#FFEF5E;top:0;left:0">
-            <span style="font-size:11px;color:rgba(0,0,0,.4);pointer-events:none">tap stack to reset</span>
+        <!-- Header -->
+        <div class="tray-header">
+          <div>
+            <div class="tray-title">📝 New Post-it</div>
+            <p class="tray-subtitle">Pick a color · write · draw · pin!</p>
           </div>
+          <button class="tray-reset-btn" onclick="resetEditor()" title="Start fresh">↺ Reset</button>
         </div>
 
-        <!-- Color picker -->
+        <!-- Color picker — always visible, prominent -->
         <div class="tray-section">
           <div class="tray-label">Note color</div>
           <div class="note-color-picker">
@@ -336,20 +333,26 @@
             <div class="note-color-swatch"        style="background:#B8E0FF" onclick="setNoteColor('#B8E0FF',this)" title="Blue"></div>
             <div class="note-color-swatch"        style="background:#FFBF69" onclick="setNoteColor('#FFBF69',this)" title="Orange"></div>
             <div class="note-color-swatch"        style="background:#E8B4F8" onclick="setNoteColor('#E8B4F8',this)" title="Purple"></div>
-            <div class="note-color-swatch"        style="background:#FFFFFF;border:1px solid #ccc" onclick="setNoteColor('#FFFFFF',this)" title="White"></div>
+            <div class="note-color-swatch"        style="background:#FFFFFF;border:2px solid #ddd" onclick="setNoteColor('#FFFFFF',this)" title="White"></div>
             <div class="note-color-swatch"        style="background:#F5E6C8" onclick="setNoteColor('#F5E6C8',this)" title="Cream"></div>
           </div>
         </div>
 
-        <!-- Note writing + drawing surface -->
+        <!-- Note editor surface -->
         <div class="tray-section">
-          <div class="tray-label">Write &amp; draw on your note</div>
+          <div class="tray-label">Write your note</div>
           <div class="editor-note-surface" id="editor-surface" style="background:#FFEF5E">
             <canvas id="editor-canvas" width="220" height="195"></canvas>
             <textarea id="note-text-input" class="editor-textarea"
                       placeholder="Write your message…&#10;(200 chars max)" maxlength="200"></textarea>
             <div id="editor-emoji-display" class="editor-emoji-overlay"></div>
-            <div class="draw-mode-indicator">✏️ Draw mode on</div>
+            <div class="draw-mode-indicator">✏️ Draw mode</div>
+          </div>
+          <!-- Draw tools inline below the note -->
+          <div class="editor-tool-row" style="margin-top:8px">
+            <button id="draw-btn"   class="btn-tool" onclick="toggleDrawMode()">✏️ Draw</button>
+            <button id="eraser-btn" class="btn-tool" onclick="toggleEraser()">◻ Erase</button>
+            <button                 class="btn-tool" onclick="clearDrawing()">🗑 Clear</button>
           </div>
         </div>
 
@@ -374,15 +377,6 @@
           <div class="selected-emoji-preview" id="selected-emoji"></div>
         </div>
 
-        <!-- Draw tools -->
-        <div class="tray-section">
-          <div class="editor-tool-row">
-            <button id="draw-btn"   class="btn-tool" onclick="toggleDrawMode()">✏️ Draw</button>
-            <button id="eraser-btn" class="btn-tool" onclick="toggleEraser()">◻ Erase</button>
-            <button                 class="btn-tool" onclick="clearDrawing()">🗑 Clear</button>
-          </div>
-        </div>
-
         <!-- Pin! -->
         <button class="btn-pin-board" id="pin-btn" onclick="pinNoteToBoard()">
           📌 Pin to Board!
@@ -390,6 +384,7 @@
         <div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:-8px">
           Sign in required · Notes expire in 7 days
         </div>
+
       </div>
 
     </div>
