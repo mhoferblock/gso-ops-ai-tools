@@ -78,6 +78,11 @@ const api = {
     const headers = { 'Content-Type': 'application/json', ...opts.headers };
     if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
     const res = await fetch(BASE + endpoint, { ...opts, headers });
+    if (res.status === 401 && state.serverConfig.sso_mode && !opts._retried) {
+      // Token expired — refresh via SSO and retry once
+      await attemptSSOLogin();
+      return api.req(endpoint, { ...opts, _retried: true });
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(err.detail || 'Request failed');
@@ -937,8 +942,9 @@ async function init() {
     state.serverConfig = { sso_mode: false, ai_enabled: false };
   }
 
-  // On Databricks: silently authenticate via SSO if not already logged in
-  if (!state.user && state.serverConfig.sso_mode) {
+  // On Databricks: always refresh token via SSO on every page load.
+  // This ensures tokens are always valid even after app restarts/redeploys.
+  if (state.serverConfig.sso_mode) {
     await attemptSSOLogin();
   }
 
