@@ -707,6 +707,7 @@ async def list_tools(
     sort: str = "newest",
     owner: Optional[str] = None,
     search: Optional[str] = None,
+    limit: int = 50,
     current_user=Depends(get_current_user),
 ):
     conn = get_db_and_backup()
@@ -719,7 +720,7 @@ async def list_tools(
         params.extend([f"%{search}%"] * 3)
     order = {"newest": "t.created_at DESC", "most_used": "t.click_count DESC",
              "most_voted": "t.vote_count DESC"}.get(sort, "t.created_at DESC")
-    q += f" ORDER BY {order}"
+    q += f" ORDER BY {order} LIMIT {max(1, min(limit, 200))}"
     ts = rows(conn.execute(q, params).fetchall())
     if current_user:
         voted = {r["tool_id"] for r in

@@ -10,6 +10,7 @@ const state = {
   serverConfig: { sso_mode: false, ai_enabled: false },
   currentSection: 'home',
   tools: [],
+  homeTools: [],
   chatMessages: [],
   lastChatId: 0,
   chatPollingTimer: null,
@@ -214,7 +215,11 @@ function navigate(section, param) {
   if (navLink) navLink.classList.add('active');
 
   // Section loaders
-  if (section === 'home')          loadHome();
+  if (section === 'home') {
+    const fi = $('home-filter');
+    if (fi) fi.value = '';          // reset filter on each visit
+    loadHome();
+  }
   if (section === 'discover')      loadDiscover();
   if (section === 'my-tools')      loadMyTools();
   if (section === 'leaderboard')   loadLeaderboard();
@@ -292,19 +297,58 @@ async function loadHome() {
     }
   } catch {}
 
-  // Recent tools
+  // Recent tools — load all so filter has something to work with
   try {
-    const tools = await api.get('/api/tools?sort=newest');
-    const el = $('home-tools-grid');
-    if (tools.length === 0) {
-      el.innerHTML = `<div class="empty"><h3>No tools yet</h3><p>Be the first to submit one!</p></div>`;
-    } else {
-      el.innerHTML = tools.slice(0, 6).map((t, i) => renderToolTile(t, i)).join('');
-    }
+    const tools = await api.get('/api/tools?sort=newest&limit=50');
+    state.homeTools = tools;
+    renderHomeTools(tools);
   } catch {}
 
   // Feed
   loadFeed();
+}
+
+function renderHomeTools(tools) {
+  const el = $('home-tools-grid');
+  const empty = $('home-filter-empty');
+  if (!el) return;
+  if (!tools.length) {
+    el.innerHTML = `<div class="empty"><h3>No tools yet</h3><p>Be the first to submit one!</p></div>`;
+    if (empty) empty.style.display = 'none';
+    return;
+  }
+  el.innerHTML = tools.map((t, i) => renderToolTile(t, i)).join('');
+  if (empty) empty.style.display = 'none';
+}
+
+function filterHomeTools(q) {
+  const term = q.trim().toLowerCase();
+  const el = $('home-tools-grid');
+  const empty = $('home-filter-empty');
+  if (!term) {
+    renderHomeTools(state.homeTools);
+    return;
+  }
+  const filtered = state.homeTools.filter(t =>
+    (t.name        || '').toLowerCase().includes(term) ||
+    (t.description || '').toLowerCase().includes(term) ||
+    (t.summary     || '').toLowerCase().includes(term) ||
+    (t.tags        || '').toLowerCase().includes(term) ||
+    (t.owner_name  || t.username || '').toLowerCase().includes(term)
+  );
+  if (!filtered.length) {
+    el.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+  } else {
+    el.innerHTML = filtered.map((t, i) => renderToolTile(t, i)).join('');
+    if (empty) empty.style.display = 'none';
+  }
+}
+
+function clearHomeFilter() {
+  const input = $('home-filter');
+  if (input) input.value = '';
+  renderHomeTools(state.homeTools);
 }
 
 function renderSpotlight() {

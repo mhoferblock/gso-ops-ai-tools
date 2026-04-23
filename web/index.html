@@ -78,8 +78,22 @@
           <h2 class="section-title">Latest Tools</h2>
           <button class="section-link" onclick="navigate('discover')">View all →</button>
         </div>
+        <div style="margin-bottom:14px;position:relative">
+          <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:15px;pointer-events:none;opacity:.5">🔍</span>
+          <input id="home-filter" type="text" placeholder="Filter by keyword, tag, or author…"
+                 oninput="filterHomeTools(this.value)"
+                 style="width:100%;box-sizing:border-box;padding:10px 12px 10px 36px;
+                        background:var(--surface);border:1px solid var(--border);
+                        border-radius:10px;color:var(--text);font-size:14px;outline:none;
+                        transition:border-color .2s"
+                 onfocus="this.style.borderColor='var(--primary)'"
+                 onblur="this.style.borderColor='var(--border)'" />
+        </div>
         <div class="tools-grid" id="home-tools-grid">
           <div class="empty"><p style="color:var(--text-muted)">Loading…</p></div>
+        </div>
+        <div id="home-filter-empty" style="display:none;text-align:center;padding:24px;color:var(--text-muted);font-size:14px">
+          No tools match that filter. <button class="section-link" onclick="clearHomeFilter()">Clear</button>
         </div>
       </div>
       <div>
