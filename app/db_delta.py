@@ -61,9 +61,12 @@ def execute(sql: str, params: Optional[dict] = None) -> list[dict]:
         return []
 
     state = resp.status.state.value if resp.status and resp.status.state else "UNKNOWN"
-    if state == "FAILED":
+    if state in ("FAILED", "CANCELED"):
         msg = resp.status.error.message if resp.status.error else "?"
-        print(f"[DeltaDB] SQL FAILED: {msg} | sql: {sql[:120]}")
+        print(f"[DeltaDB] SQL {state}: {msg} | sql: {sql[:120]}")
+        return []
+    if state in ("PENDING", "RUNNING"):
+        print(f"[DeltaDB] SQL timed out ({state}) after 30s | sql: {sql[:120]}")
         return []
 
     if not resp.result or not resp.result.data_array:

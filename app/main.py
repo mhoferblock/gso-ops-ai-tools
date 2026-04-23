@@ -331,13 +331,23 @@ def decode_token(token: str) -> Optional[int]:
 
 async def get_current_user(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
+        print("[AUTH] no/bad Authorization header")
         return None
-    uid = decode_token(authorization.split(" ", 1)[1])
+    token_str = authorization.split(" ", 1)[1]
+    uid = decode_token(token_str)
     if not uid:
+        print(f"[AUTH] decode_token failed — token prefix={token_str[:12]}... SECRET_OK={bool(SECRET)}")
         return None
+    using_delta = USE_DELTA and _delta.is_available()
+    print(f"[AUTH] uid={uid} backend={'delta' if using_delta else 'sqlite'}")
     conn = get_db_and_backup()
-    u = row(conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+    result = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+    u = row(result)
     conn.close()
+    if u:
+        print(f"[AUTH] found user id={u.get('id')} username={u.get('username')}")
+    else:
+        print(f"[AUTH] NO user found for id={uid} — result was {result}")
     return u
 
 async def require_user(authorization: Optional[str] = Header(None)):
@@ -633,7 +643,9 @@ async def sso_login(request: Request):
             u["display_name"] = display_name
     conn.close()
 
-    return {"token": encode_token(u["id"]), "user": u, "sso": True}
+    token = encode_token(u["id"])
+    print(f"[SSO] issuing token for user id={u['id']} username={u.get('username')} email={u.get('email')}")
+    return {"token": token, "user": u, "sso": True}
 
 
 @app.get("/api/config")
