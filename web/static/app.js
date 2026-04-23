@@ -76,7 +76,9 @@ function $(id) { return document.getElementById(id); }
 const api = {
   async req(endpoint, opts = {}) {
     const headers = { 'Content-Type': 'application/json', ...opts.headers };
-    if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
+    // Use X-App-Token instead of Authorization — Databricks Apps proxy strips
+    // the standard Authorization header before forwarding requests to the app.
+    if (state.token) headers['X-App-Token'] = state.token;
     const res = await fetch(BASE + endpoint, { ...opts, headers });
     if (res.status === 401 && state.serverConfig.sso_mode && !opts._retried) {
       // Token expired — refresh via SSO and retry once

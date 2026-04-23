@@ -329,11 +329,19 @@ def decode_token(token: str) -> Optional[int]:
         pass
     return None
 
-async def get_current_user(authorization: Optional[str] = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        print("[AUTH] no/bad Authorization header")
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+    x_app_token:   Optional[str] = Header(None),
+):
+    # X-App-Token is our custom header (Authorization is stripped by Databricks Apps proxy)
+    token_str = x_app_token or (
+        authorization.split(" ", 1)[1]
+        if authorization and authorization.startswith("Bearer ")
+        else None
+    )
+    if not token_str:
+        print("[AUTH] no token — X-App-Token and Authorization both missing/bad")
         return None
-    token_str = authorization.split(" ", 1)[1]
     uid = decode_token(token_str)
     if not uid:
         print(f"[AUTH] decode_token failed — token prefix={token_str[:12]}... SECRET_OK={bool(SECRET)}")
@@ -350,8 +358,11 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         print(f"[AUTH] NO user found for id={uid} — result was {result}")
     return u
 
-async def require_user(authorization: Optional[str] = Header(None)):
-    u = await get_current_user(authorization)
+async def require_user(
+    authorization: Optional[str] = Header(None),
+    x_app_token:   Optional[str] = Header(None),
+):
+    u = await get_current_user(authorization, x_app_token)
     if not u:
         raise HTTPException(401, "Not authenticated")
     return u
